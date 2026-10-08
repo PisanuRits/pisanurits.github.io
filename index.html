@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>โปรแกรมของเบิร์ด</title>
+<meta name="description" content="รวมเว็บแอปสำหรับงานวิศวกรรมโยธา ใช้ฟรี ใช้งานออฟไลน์ได้">
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--fg:#1a1a1a;--muted:#5b6470;--accent:#1f5fbf;--accent-fg:#fff;--border:#e2e5ea;--shadow:0 6px 24px rgba(20,40,80,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#121417;--card:#1c1f24;--fg:#eceef1;--muted:#9aa3ae;--accent:#5b8ff0;--accent-fg:#0b1526;--border:#2a2f37;--shadow:0 6px 24px rgba(0,0,0,.4)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif}
+main{max-width:960px;margin:0 auto;padding:40px 16px 60px}
+h1{font-size:28px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 28px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
+.card img{width:64px;height:64px;border-radius:14px}
+.card h2{font-size:20px;margin:0}
+.card p{margin:0;color:var(--muted);font-size:15px}
+.meta{font-size:13px;color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:auto;padding-top:6px}
+a.btn{display:inline-block;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:600;border:1px solid var(--border);color:var(--fg)}
+a.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.soon{opacity:.6}
+footer{margin-top:40px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <h1>โปรแกรมของเบิร์ด</h1>
+  <p class="sub">เว็บแอปสำหรับงานวิศวกรรมโยธา เปิดใช้ได้ทันที ติดตั้งลงแท็บเล็ต/มือถือได้ และใช้งานออฟไลน์</p>
+  <div class="grid">
+    <div class="card">
+      <img src="scale-sketch/icon-192.png" alt="">
+      <h2>Scale Sketch</h2>
+      <p>วาดสเก็ตช์ตามสเกลจริงด้วยปากกาบนแท็บเล็ต กรอบหลายสเกลในแผ่นเดียว snap ล็อกมุม บอกระยะอัตโนมัติ ลายวัสดุ และส่งออก PDF ตามสเกล</p>
+      <div class="meta">เวอร์ชัน 2.15.0 · Android / iPad / Windows · Chrome หรือ Safari</div>
+      <div class="row"><a class="btn primary" href="scale-sketch/">เปิดโปรแกรม</a><a class="btn" href="scale-sketch/index.html" download="scale-sketch.html">ดาวน์โหลดไฟล์</a></div>
+    </div>
+    <div class="card soon">
+      <h2>โปรแกรมถัดไป</h2>
+      <p>พื้นที่สำหรับโปรแกรมอื่น ๆ ที่จะเพิ่มในอนาคต</p>
+      <div class="meta">เร็ว ๆ นี้</div>
+    </div>
+  </div>
+  <footer>งานทั้งหมดถูกเก็บไว้ในเบราว์เซอร์ของเครื่องที่ใช้ ควรส่งออกไฟล์สำรองเป็นระยะ</footer>
+</main>
+</body>
+</html>
