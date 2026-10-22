@@ -139,7 +139,7 @@ input.num{width:96px;font-variant-numeric:tabular-nums;font-family:var(--mono)}
     <button class="tool" data-tool="dim" id="bDim"><svg viewBox="0 0 24 24"><path d="M4 14h16"/><path d="M4 10v8M20 10v8"/><path d="M7 11l-3 3 3 3M17 11l3 3-3 3"/></svg>บอกระยะ<span class="sub" id="dimModeLbl">ตามเส้น</span></button>
     <button class="tool" data-tool="frame" id="bFrame"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" stroke-dasharray="3 2"/><path d="M6 21h6"/></svg>กรอบ<span class="sub" id="frameModeLbl">กรอบใหม่</span></button>
     <button class="tool" data-tool="trim"><svg viewBox="0 0 24 24"><path d="M4 12h7M15 12h5"/><path d="M12 4v16" stroke-dasharray="2 2"/><path d="M9 9l3 3-3 3" /></svg>ตัด</button>
-    <button class="tool" data-tool="extend"><svg viewBox="0 0 24 24"><path d="M4 12h9"/><path d="M13 12h6" stroke-dasharray="2 2"/><path d="M20 4v16"/></svg>ต่อ</button>
+    <button class="tool" data-tool="extend" id="bExtend"><svg viewBox="0 0 24 24"><path d="M4 12h9"/><path d="M13 12h6" stroke-dasharray="2 2"/><path d="M20 4v16"/></svg>ต่อ<span class="sub" id="extModeLbl">ไปชน</span></button>
     <button class="tool" data-tool="hl"><svg viewBox="0 0 24 24"><path d="M4 17l9-9 4 4-9 9H4z" fill="currentColor" fill-opacity=".35"/><path d="M13 8l3-3 4 4-3 3"/><path d="M3 21h18"/></svg>เน้น</button>
     <button class="tool" data-tool="pat"><svg viewBox="0 0 24 24"><path d="M4 17l9-9 4 4-9 9H4z"/><path d="M6 15l2 2M8 13l2 2M10 11l2 2M12 9l2 2" stroke-width="1.2"/><path d="M13 8l3-3 4 4-3 3"/></svg>ลาย</button>
     <button class="tool" data-tool="erase"><svg viewBox="0 0 24 24"><path d="M4 15l8-9 8 8-5 5H9z"/><path d="M9 19l-5-4"/></svg>ยางลบ</button>
@@ -161,7 +161,7 @@ input.num{width:96px;font-variant-numeric:tabular-nums;font-family:var(--mono)}
 (function(){
 'use strict';
 // ---------- constants ----------
-const VERSION='2.15.0';
+const VERSION='2.19.1';
 const PAPER={A4:[210,297],A3:[297,420]};
 const SCALES=[5,10,20,25,50,75,100,200];
 const WIDTHS=[0.18,0.25,0.35,0.5,0.7];
@@ -340,6 +340,7 @@ function itemSegs(it){
     case 'text':{const r=textRect(it);return polySegs([{x:r.x,y:r.y},{x:r.x+r.w,y:r.y},{x:r.x+r.w,y:r.y+r.h},{x:r.x,y:r.y+r.h}],true);}
     case 'rect':return polySegs(rectPts(it),true);
     case 'tri':return polySegs(triPts(it),true);
+    case 'poly':return polySegs(it.pts,!!it.closed);
     case 'circle':{const n=32,p=[];for(let i=0;i<n;i++){const a=i/n*2*Math.PI;p.push({x:it.c.x+it.r*Math.cos(a),y:it.c.y+it.r*Math.sin(a)});}return polySegs(p,true);}
     case 'arc':return polySegs(arcPoly(it),false);
     case 'dim':{const g=dimGeom(it);if(!g)return [];const b=dimTextBox(it,g);const c=Math.cos(b.rot),s=Math.sin(b.rot);const hw=Math.max(b.w/2,it.ts);const tseg=[{x:b.p.x-c*hw,y:b.p.y-s*hw},{x:b.p.x+c*hw,y:b.p.y+s*hw}];const segs=[tseg];const ld=dimLeader(it,g);if(ld)segs.push(ld);
@@ -355,7 +356,8 @@ function snapPointsOf(it){
     case 'write':return [];
     case 'rect':{const p=rectPts(it);return [...p,mid(p[0],p[1]),mid(p[1],p[2]),mid(p[2],p[3]),mid(p[3],p[0])];}
     case 'tri':{const p=triPts(it);return [...p,mid(p[0],p[1]),mid(p[1],p[2]),mid(p[2],p[0])];}
-    case 'circle':return [it.c];
+    case 'poly':{const out=[...it.pts];for(const [a,b] of itemSegs(it))out.push(mid(a,b));return out;}
+    case 'circle':return [it.c,{x:it.c.x+it.r,y:it.c.y},{x:it.c.x-it.r,y:it.c.y},{x:it.c.x,y:it.c.y+it.r},{x:it.c.x,y:it.c.y-it.r}]; // centre + quadrants
     case 'arc':return [arcPt(it,it.a0),arcPt(it,it.a1),arcPt(it,it.a0+arcSweep(it)/2),it.c];
     case 'dim':case 'hl':return [];
     case 'leader':return [it.p1,it.p2];
@@ -367,7 +369,7 @@ function itemBBox(it){let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;cons
   else for(const [a,b] of itemSegs(it)){add(a);add(b);}
   return {x1,y1,x2,y2};}
 function moveItem(it,dx,dy,translate){const mv=p=>{p.x+=dx;p.y+=dy;};
-  if(it.type==='line'||it.type==='guide'){mv(it.p1);mv(it.p2);}else if(it.type==='free'||it.type==='write'||it.type==='hl'){it.pts.forEach(mv);if(it.clip)it.clip.forEach(lp=>lp.forEach(mv));}
+  if(it.type==='line'||it.type==='guide'){mv(it.p1);mv(it.p2);}else if(it.type==='poly')it.pts.forEach(mv);else if(it.type==='free'||it.type==='write'||it.type==='hl'){it.pts.forEach(mv);if(it.clip)it.clip.forEach(lp=>lp.forEach(mv));}
   else if(it.type==='rect')mv(it.p);else if(it.type==='tri')mv(it.p1);else if(it.type==='circle'||it.type==='arc')mv(it.c);else if(it.type==='leader'){mv(it.p1);mv(it.p2);}else if(it.type==='text')mv(it.p);
   else if(it.type==='dim'){if(translate){if(!it.ref&&it.pa){mv(it.pa);mv(it.pb);}return;} // attached dims follow their object; a group/frame move must not touch their offset
     const g=dimGeom(it);if(!g)return;if(g.kind==='rad'){const tp=dimTextPos(it,g).p;it.ang=Math.atan2(tp.y+dy-g.c.y,tp.x+dx-g.c.x);}else it.off+=dx*g.n.x+dy*g.n.y;}}
@@ -386,7 +388,7 @@ function dimGeom(d){
   if(!d.ref&&d.pa&&d.pb)return linGeom(d.pa,d.pb,d,true);
   const it=itemOf(d.ref);if(!it)return null;
   if(d.kind==='rad'){if(it.type!=='circle'&&it.type!=='arc')return null;const e={x:it.c.x+it.r*Math.cos(d.ang),y:it.c.y+it.r*Math.sin(d.ang)};return {kind:'rad',c:it.c,r:it.r,e,ang:d.ang};}
-  let a,b;if(it.type==='line'){a=it.p1;b=it.p2;}else if(it.type==='rect'||it.type==='tri'){const sg=itemSegs(it)[d.seg];if(!sg)return null;[a,b]=sg;}else return null;
+  let a,b;if(it.type==='line'){a=it.p1;b=it.p2;}else if(it.type==='rect'||it.type==='tri'||it.type==='poly'){const sg=itemSegs(it)[d.seg];if(!sg)return null;[a,b]=sg;}else return null;
   return linGeom(a,b,d,false);}
 function dimText(d,g){const fid=d.frame;const v=g.kind==='rad'?g.r:g.L;const real=v*scaleFor(fid);let t;
   if(d.dec!=null&&d.dec!==''){const u=doc.unit;const val=u==='mm'?real:u==='cm'?real/10:real/1000;t=val.toFixed(+d.dec)+(d.unit?(u==='mm'?' มม.':u==='cm'?' ซม.':' ม.'):'');}
@@ -432,18 +434,49 @@ function setLineAngle(it,deg){const r=-deg*Math.PI/180;if(it.type==='line'){cons
 function itemAngle(it){if(it.type==='line')return angDeg(it.p1,it.p2);if(it.type==='tri'){let d=-it.ang*180/Math.PI;d=Math.round(d*10)/10;if(d<=-180)d+=360;return d;}return 0;}
 function selIds(){if(!sel)return [];if(sel.kind==='item')return [sel.id];if(sel.kind==='multi')return sel.ids;return [];}
 function isSel(it){return sel&&((sel.kind==='item'&&sel.id===it.id)||(sel.kind==='multi'&&sel.ids.includes(it.id)));}
-function setMode(m){mode=m;showProps();if(m){$('#hint').textContent=m.kind==='copy'?'คัดลอก: ลากจากจุดอ้างอิงไปตำแหน่งใหม่ (ทำซ้ำได้) · กด "เสร็จ" เมื่อพอ':'ออฟเซ็ต: แตะด้านที่ต้องการให้เส้นใหม่ไปอยู่ (ทำซ้ำได้)';}else $('#hint').textContent=HINTS[tool]||'';render();}
+function setMode(m){mode=m;showProps();if(m){$('#hint').textContent=modeHint();}else $('#hint').textContent=HINTS[tool]||'';render();}
+function modeHint(){if(!mode)return '';if(mode.kind==='offset')return 'ออฟเซ็ต: แตะด้านที่ต้องการให้เส้นใหม่ไปอยู่ (ทำซ้ำได้)';const nm=mode.kind==='move'?'ย้าย':'คัดลอก';
+  return mode.base?nm+': แตะหรือลากไปยังจุดปลายทาง (snap ได้ · ล็อกมุมได้)'+(mode.kind==='copy'?' · วางซ้ำได้ · กด "เสร็จ" เมื่อพอ':''):nm+': แตะจุดอ้างอิงบนชิ้นที่เลือก (□ ปลาย/มุม · △ กึ่งกลาง · ○ ศูนย์กลาง) หรือแตะที่ใดก็ได้';}
+// snap markers of the selected items, shown while a base point is being chosen
+function snapMarkers(it){const out=[];const E=p=>out.push({p,k:'end'}),M=p=>out.push({p,k:'mid'}),C=p=>out.push({p,k:'cen'});
+  switch(it.type){
+    case 'line':case 'guide':E(it.p1);E(it.p2);M(mid(it.p1,it.p2));break;
+    case 'leader':E(it.p1);E(it.p2);break;
+    case 'free':E(it.pts[0]);E(it.pts[it.pts.length-1]);break;
+    case 'rect':case 'tri':case 'poly':{const pts=it.type==='rect'?rectPts(it):it.type==='tri'?triPts(it):it.pts;pts.forEach(E);for(const [a,b] of itemSegs(it))M(mid(a,b));if(it.type==='rect')C({x:it.p.x+it.w/2,y:it.p.y+it.h/2});break;}
+    case 'circle':C(it.c);for(const a of [0,Math.PI/2,Math.PI,-Math.PI/2])E({x:it.c.x+it.r*Math.cos(a),y:it.c.y+it.r*Math.sin(a)});break;
+    case 'arc':E(arcPt(it,it.a0));E(arcPt(it,it.a1));M(arcPt(it,it.a0+arcSweep(it)/2));C(it.c);break;
+    case 'text':{const r=textRect(it);E({x:r.x,y:r.y});E({x:r.x+r.w,y:r.y});E({x:r.x,y:r.y+r.h});E({x:r.x+r.w,y:r.y+r.h});break;}
+    case 'hl':{const b=itemBBox(it);if(isFinite(b.x1))C({x:(b.x1+b.x2)/2,y:(b.y1+b.y2)/2});break;}
+  }return out;}
+function modeSrcs(){return (mode.srcs||[mode.src]).map(itemOf).filter(Boolean);}
+function pickBase(p){ // nearest marker within 14 px, else the tapped point (snapped to anything)
+  const tol=14/view.zoom;let best=null,bd=tol;for(const it of modeSrcs())for(const m of snapMarkers(it)){const d=dist(p,m.p);if(d<bd){bd=d;best=m.p;}}
+  if(best)return {x:best.x,y:best.y};const s=findSnap(p,'*');return s?{x:s.x,y:s.y}:p;}
+function placeGhost(p){placeGhostFor(drag,p);}
+function placeGhostFor(d,p){ // ghost copies positioned so the base point sits at the (snapped, angle-locked) pen position
+  const srcs=modeSrcs();if(!srcs.length||!mode.base)return;const ex=new Set(srcs.map(i=>i.id));for(const it of srcs)for(const dm of dimsOf(it.id))ex.add(dm.id);
+  const q=endPoint(mode.base,p,'*',ex,true);const dx=q.x-mode.base.x,dy=q.y-mode.base.y;
+  d.temps=srcs.map(x=>{const t=clone(x);t.id='ghost';if(t.type!=='dim'||!t.ref)moveItem(t,dx,dy,true);return t;});d.temp=d.temps[0];d.dx=dx;d.dy=dy;
+  d.label=fmtLen(Math.hypot(dx,dy),srcs[0].frame)+(angleOn()?'  '+angDeg(mode.base,q)+'°':'');d.labelAt=q;}
+function placeMode(dx,dy){ // apply the move / drop a copy
+  const srcs=modeSrcs();if(!srcs.length)return;commit();
+  if(mode.kind==='move'){for(const it of srcs)if(it.type!=='dim'||!it.ref)moveItem(it,dx,dy,true);
+    // free dims attached by ref to a moved item follow automatically; dims attached to items outside the set stay
+    setMode(null);toast('ย้ายแล้ว');return;}
+  const made=[];for(const src of srcs){const t=clone(src);t.id=uid();if(t.type!=='dim'||!t.ref)moveItem(t,dx,dy,true);doc.items.push(t);made.push(t);for(const dm of dimsOf(src.id)){const c=clone(dm);c.id=uid();c.ref=t.id;doc.items.push(c);}}
+  toast(made.length>1?'วางสำเนา '+made.length+' ชิ้น · วางต่อได้':'วางสำเนาแล้ว · วางต่อได้');render();}
 // dimension items that reference a given item
 function dimsOf(id){return doc.items.filter(i=>i.type==='dim'&&i.ref===id);}
 function addDimFor(it,p){ // p: click point (paper) decides side / angle
   const fid=it.frame;const base={id:uid(),type:'dim',frame:fid,ref:it.id,color:'#111111',sw:0.18,unit:dimDef.unit,ts:dimDef.ts,lines:dimDef.lines,orient:dimDef.orient||'aligned',...dimStyleDef()};
   if(it.type==='circle'||it.type==='arc'){let ang=Math.atan2(p.y-it.c.y,p.x-it.c.x);if(it.type==='arc'&&!arcHas(it,ang))ang=it.a0+arcSweep(it)/2;return Object.assign(base,{kind:'rad',ang});}
   let seg=0,a,b;
-  if(it.type==='line'){a=it.p1;b=it.p2;}else if(it.type==='rect'||it.type==='tri'){const sg=itemSegs(it);let bd=Infinity;sg.forEach((s,i)=>{const d=segDist(p,s[0],s[1]);if(d<bd){bd=d;seg=i;}});[a,b]=sg[seg];}else return null;
+  if(it.type==='line'){a=it.p1;b=it.p2;}else if(it.type==='rect'||it.type==='tri'||it.type==='poly'){const sg=itemSegs(it);let bd=Infinity;sg.forEach((s,i)=>{const d=segDist(p,s[0],s[1]);if(d<bd){bd=d;seg=i;}});[a,b]=sg[seg];}else return null;
   const L=dist(a,b);if(L===0)return null;if(base.orient==='axis')base.orient=Math.abs(b.x-a.x)>=Math.abs(b.y-a.y)?'h':'v';const g0=linGeom(a,b,{off:0,orient:base.orient},false);if(!g0)return null;const n=g0.n;
   let side=Math.sign((p.x-a.x)*n.x+(p.y-a.y)*n.y)||1;
-  if(it.type==='rect'||it.type==='tri'){ // outside of the shape
-    const pts=it.type==='rect'?rectPts(it):triPts(it);const cx=pts.reduce((s,q)=>s+q.x,0)/pts.length,cy=pts.reduce((s,q)=>s+q.y,0)/pts.length;side=-Math.sign((cx-a.x)*n.x+(cy-a.y)*n.y)||1;}
+  if(it.type==='rect'||it.type==='tri'||(it.type==='poly'&&it.closed)){ // outside of the shape
+    const pts=it.type==='rect'?rectPts(it):it.type==='tri'?triPts(it):it.pts;const cx=pts.reduce((s,q)=>s+q.x,0)/pts.length,cy=pts.reduce((s,q)=>s+q.y,0)/pts.length;side=-Math.sign((cx-a.x)*n.x+(cy-a.y)*n.y)||1;}
   if(base.orient==='axis')base.orient=Math.abs(b.x-a.x)>=Math.abs(b.y-a.y)?'h':'v';
   return Object.assign(base,{kind:'lin',seg,off:side*7});}
 
@@ -494,14 +527,78 @@ function extendRound(it,p){ // arc: extend the nearer end along its circle to th
   for(const a of angs){if(nearEnd==='a1'){const v=normAng(a-it.a1);if(v>1e-6&&v<TAU-sw-1e-6&&v<bd){bd=v;best=a;}}else{const v=normAng(it.a0-a);if(v>1e-6&&v<TAU-sw-1e-6&&v<bd){bd=v;best=a;}}}
   if(best===null){toast('ไม่พบเส้นในแนวโค้งนี้ให้ต่อไปชน');return false;}
   commit();if(nearEnd==='a1')it.a1=best;else it.a0=best;toast('ต่อส่วนโค้งไปชนแล้ว');return true;}
-function explodeItem(it){ // rect / tri -> straight lines; attached dimensions follow their edge
-  if(it.type!=='rect'&&it.type!=='tri')return;commit();const segs=itemSegs(it);const lines=segs.map(([p,q])=>({id:uid(),type:'line',frame:it.frame,sw:it.sw,color:it.color,ls:it.ls||'solid',p1:{...p},p2:{...q}}));
+// ---- join: collinear lines → one line; non-parallel lines → corner; arcs on one circle → one arc ----
+const EPS_J=0.5; // mm: endpoints closer than this count as touching
+function endsOf(it){if(it.type==='line')return [it.p1,it.p2];if(it.type==='poly')return it.closed?[]:[it.pts[0],it.pts[it.pts.length-1]];if(it.type==='arc')return [arcPt(it,it.a0),arcPt(it,it.a1)];return [];}
+function pathOf(it){if(it.type==='line')return [{...it.p1},{...it.p2}];if(it.type==='poly')return it.pts.map(p=>({...p}));if(it.type==='arc')return arcPoly(it).map(p=>({...p}));return null;}
+function chainInto(a,b){ // append b's path to polyline a (a: line/poly/arc, b: line/poly/arc) when an end of b touches an end of a; returns the poly or null
+  const pa=pathOf(a),pb=pathOf(b);if(!pa||!pb||(a.type==='poly'&&a.closed)||(b.type==='poly'&&b.closed))return null;
+  const A0=pa[0],A1=pa[pa.length-1],B0=pb[0],B1=pb[pb.length-1];let pts=null;
+  if(dist(A1,B0)<EPS_J)pts=[...pa,...pb.slice(1)];else if(dist(A1,B1)<EPS_J)pts=[...pa,...pb.slice(0,-1).reverse()];else if(dist(A0,B1)<EPS_J)pts=[...pb,...pa.slice(1)];else if(dist(A0,B0)<EPS_J)pts=[...pb.reverse(),...pa.slice(1)];
+  if(!pts)return null;const closed=pts.length>3&&dist(pts[0],pts[pts.length-1])<EPS_J;if(closed)pts.pop();
+  // drop collinear middle points
+  const out=[];for(let i=0;i<pts.length;i++){const p=pts[i],q=pts[(i+1)%pts.length],o=out[out.length-1];if(o&&!closed&&i===pts.length-1){out.push(p);break;}if(o){const ux=p.x-o.x,uy=p.y-o.y,vx=q.x-p.x,vy=q.y-p.y;const L=Math.hypot(ux,uy)*Math.hypot(vx,vy);if(L&&Math.abs(ux*vy-uy*vx)/L<0.01&&ux*vx+uy*vy>0)continue;}out.push(p);}
+  return {pts:out,closed};}
+function rebindDims(np,olds){ // dimensions that pointed at a consumed line now point at the matching polyline segment
+  const segs=itemSegs(np);for(const o of olds){if(o.type!=='line')continue;for(const dm of dimsOf(o.id)){let best=-1,bd=EPS_J;segs.forEach(([p,q],i)=>{const d=Math.min(dist(p,o.p1)+dist(q,o.p2),dist(p,o.p2)+dist(q,o.p1));if(d<bd){bd=d;best=i;}});if(best>=0){dm.ref=np.id;dm.seg=best;}}}}
+function joinItems(a,b){ // returns the surviving item or null (toasts the reason)
+  // touching end-to-end (not collinear) → one polyline; a closed loop becomes a polygon
+  if(['line','poly','arc'].includes(a.type)&&['line','poly','arc'].includes(b.type)){const ch=chainInto(a,b);
+    if(ch&&!(a.type==='line'&&b.type==='line'&&isCollinear(a,b))&&!(a.type==='arc'&&b.type==='arc'&&dist(a.c,b.c)<0.3&&Math.abs(a.r-b.r)<0.3)){
+      commit();const keep=a.type==='poly'?a:b.type==='poly'?b:a;const other=keep===a?b:a;const idx=doc.items.indexOf(keep);
+      const np={id:uid(),type:'poly',frame:keep.frame,sw:keep.sw,color:keep.color,ls:keep.ls||'solid',pts:ch.pts,closed:ch.closed};doc.items.splice(idx,1,np);
+      rebindDims(np,[a,b]);if(keep.type==='poly')for(const dm of dimsOf(keep.id)){dm.ref=np.id;}doc.items=doc.items.filter(i=>i.id!==other.id);purgeDims();render();toast(ch.closed?'ปิดเป็นรูปหลายเหลี่ยมแล้ว ('+ch.pts.length+' จุด)':'ต่อเป็นเส้นต่อเนื่องแล้ว · แตะเส้นถัดไปเพื่อต่อ');return np;}}
+  if(a.type==='line'&&b.type==='line'){
+    const ua={x:a.p2.x-a.p1.x,y:a.p2.y-a.p1.y},La=Math.hypot(ua.x,ua.y);const ub={x:b.p2.x-b.p1.x,y:b.p2.y-b.p1.y},Lb=Math.hypot(ub.x,ub.y);if(!La||!Lb)return null;
+    const cross=(ua.x*ub.y-ua.y*ub.x)/(La*Lb);
+    if(isCollinear(a,b)){ // collinear: span from the outermost ends
+      commit();const d={x:ua.x/La,y:ua.y/La};const pts=[a.p1,a.p2,b.p1,b.p2].map(q=>({t:(q.x-a.p1.x)*d.x+(q.y-a.p1.y)*d.y,q}));pts.sort((x,y)=>x.t-y.t);
+      a.p1={...pts[0].q};a.p2={...pts[pts.length-1].q};for(const dm of dimsOf(b.id)){dm.ref=a.id;dm.seg=undefined;}doc.items=doc.items.filter(i=>i.id!==b.id);render();toast('รวมเป็นเส้นเดียวแล้ว');return a;}
+    if(Math.abs(cross)<0.02){toast('เส้นขนานกันแต่ไม่อยู่แนวเดียวกัน รวมไม่ได้');return null;}
+    // corner: move the nearer end of each line to the intersection of the two infinite lines
+    const den=ua.x*ub.y-ua.y*ub.x;const t=((b.p1.x-a.p1.x)*ub.y-(b.p1.y-a.p1.y)*ub.x)/den;const X={x:a.p1.x+ua.x*t,y:a.p1.y+ua.y*t};
+    commit();for(const ln of [a,b]){if(dist(ln.p1,X)<dist(ln.p2,X))ln.p1={...X};else ln.p2={...X};}render();toast('ปิดมุมให้บรรจบแล้ว');return a;}
+  if(a.type==='arc'&&b.type==='arc'){
+    if(dist(a.c,b.c)>0.3||Math.abs(a.r-b.r)>0.3){toast('ส่วนโค้งต้องอยู่บนวงกลมเดียวกัน (ศูนย์กลางและรัศมีเท่ากัน)');return null;}
+    const sa=arcSweep(a),sb=arcSweep(b);const tol=0.02;
+    const inA=x=>normAng(x-a.a0)<=sa+tol,inB=x=>normAng(x-b.a0)<=sb+tol;
+    if(!(inA(b.a0)||inB(a.a0))){toast('ส่วนโค้งทั้งสองไม่ติดกัน');return null;}
+    commit();const s0=inB(a.a0)&&!inA(b.a0)?b.a0:a.a0;const ends=[a.a1,b.a1].map(e=>normAng(e-s0));let sw=Math.max(...ends);
+    // an end that sits inside the other arc's range must not shorten the union: take the larger reach
+    if(sw>=TAU-tol){a.type='circle';delete a.a0;delete a.a1;}else{a.a0=s0;a.a1=s0+sw;}
+    for(const dm of dimsOf(b.id))dm.ref=a.id;doc.items=doc.items.filter(i=>i.id!==b.id);render();toast('รวมส่วนโค้งแล้ว');return a;}
+  toast('รวมได้เฉพาะ เส้นตรง+เส้นตรง หรือ ส่วนโค้ง+ส่วนโค้ง');return null;}
+function isCollinear(a,b){const ua={x:a.p2.x-a.p1.x,y:a.p2.y-a.p1.y},La=Math.hypot(ua.x,ua.y);const ub={x:b.p2.x-b.p1.x,y:b.p2.y-b.p1.y},Lb=Math.hypot(ub.x,ub.y);if(!La||!Lb)return false;const cross=(ua.x*ub.y-ua.y*ub.x)/(La*Lb);const offB=Math.abs((b.p1.x-a.p1.x)*ua.y-(b.p1.y-a.p1.y)*ua.x)/La;return Math.abs(cross)<0.02&&offB<0.3;}
+function joinChain(ids){ // chain all selected lines/arcs/polylines that touch end-to-end into polylines (closed loops → polygons)
+  const its=ids.map(itemOf).filter(i=>i&&['line','poly','arc'].includes(i.type)&&!(i.type==='poly'&&i.closed));if(its.length<2){toast('เลือกเส้นอย่างน้อย 2 เส้นที่ปลายชนกัน');return;}
+  commit();const pool=its.slice();const made=[];let joined=0;
+  while(pool.length){let cur=pool.shift();let grew=true;while(grew&&!(cur.type==='poly'&&cur.closed)){grew=false;for(let i=0;i<pool.length;i++){const ch=chainInto(cur,pool[i]);if(ch){const other=pool.splice(i,1)[0];const base=cur.type==='poly'?cur:other.type==='poly'?other:cur;
+        cur={id:base.id,type:'poly',frame:base.frame,sw:base.sw,color:base.color,ls:base.ls||'solid',pts:ch.pts,closed:ch.closed};joined++;grew=true;break;}}}
+    made.push(cur);}
+  for(const m of made)if(m.type==='poly')rebindDims(m,its);
+  if(!joined){undoStack.pop();updateUndoBtns();toast('ไม่มีปลายเส้นที่ชนกันในชุดที่เลือก');return;}
+  const set=new Set(its.map(i=>i.id));const first=doc.items.findIndex(i=>set.has(i.id));doc.items=doc.items.filter(i=>!set.has(i.id));doc.items.splice(first<0?doc.items.length:first,0,...made);purgeDims();
+  const ids2=made.map(m=>m.id);sel=ids2.length===1?{kind:'item',id:ids2[0]}:{kind:'multi',ids:ids2};showProps();render();
+  const closedN=made.filter(m=>m.type==='poly'&&m.closed).length;toast('รวมได้ '+made.length+' ชิ้น'+(closedN?' (ปิดรูป '+closedN+')':''));}
+function joinSelected(ids){ // merge every collinear pair among the selected lines
+  const lines=ids.map(itemOf).filter(i=>i&&i.type==='line');let n=0,changed=true;
+  while(changed){changed=false;for(let i=0;i<lines.length&&!changed;i++)for(let j=i+1;j<lines.length;j++){const a=lines[i],b=lines[j];
+    const ua={x:a.p2.x-a.p1.x,y:a.p2.y-a.p1.y},La=Math.hypot(ua.x,ua.y);const ub={x:b.p2.x-b.p1.x,y:b.p2.y-b.p1.y},Lb=Math.hypot(ub.x,ub.y);if(!La||!Lb)continue;
+    const cross=(ua.x*ub.y-ua.y*ub.x)/(La*Lb);const offB=Math.abs((b.p1.x-a.p1.x)*ua.y-(b.p1.y-a.p1.y)*ua.x)/La;
+    if(Math.abs(cross)<0.02&&offB<0.3){const d={x:ua.x/La,y:ua.y/La};const pts=[a.p1,a.p2,b.p1,b.p2].map(q=>({t:(q.x-a.p1.x)*d.x+(q.y-a.p1.y)*d.y,q}));pts.sort((x,y)=>x.t-y.t);
+      // only merge when the two spans touch or overlap (a small gap counts); far-apart collinear lines stay separate
+      const ta=[(a.p1.x-a.p1.x)*d.x,(a.p2.x-a.p1.x)*d.x+(a.p2.y-a.p1.y)*d.y].sort((x,y)=>x-y),tb=[(b.p1.x-a.p1.x)*d.x+(b.p1.y-a.p1.y)*d.y,(b.p2.x-a.p1.x)*d.x+(b.p2.y-a.p1.y)*d.y].sort((x,y)=>x-y);
+      if(tb[0]>ta[1]+2||ta[0]>tb[1]+2)continue;
+      if(!n)commit();a.p1={...pts[0].q};a.p2={...pts[pts.length-1].q};for(const dm of dimsOf(b.id)){dm.ref=a.id;dm.seg=undefined;}doc.items=doc.items.filter(i=>i.id!==b.id);lines.splice(j,1);n++;changed=true;break;}}}
+  if(!n){toast('ไม่มีเส้นแนวเดียวกันที่ติดกันในชุดที่เลือก');return;}const left=lines.map(l=>l.id);sel=left.length===1?{kind:'item',id:left[0]}:{kind:'multi',ids:left};showProps();render();toast('รวมแล้ว '+n+' คู่');}
+function explodeItem(it){ // rect / tri / poly -> straight lines; attached dimensions follow their edge
+  if(it.type!=='rect'&&it.type!=='tri'&&it.type!=='poly')return;commit();const segs=itemSegs(it);const lines=segs.map(([p,q])=>({id:uid(),type:'line',frame:it.frame,sw:it.sw,color:it.color,ls:it.ls||'solid',p1:{...p},p2:{...q}}));
   for(const dm of dimsOf(it.id)){if(dm.kind==='lin'&&lines[dm.seg]){dm.ref=lines[dm.seg].id;dm.seg=undefined;}}
   const idx=doc.items.indexOf(it);doc.items.splice(idx,1,...lines);purgeDims();sel={kind:'multi',ids:lines.map(l=>l.id)};showProps();render();toast('แยกเป็น '+lines.length+' เส้นแล้ว');}
 
 // snap: find nearest snap point among items in same frame (excluding ids)
 // geometric primitives of an item for intersection: segments and circles
-function itemPrims(it){if(it.type==='circle')return {segs:[],circles:[{c:it.c,r:it.r}]};if(it.type==='arc')return {segs:[],circles:[{c:it.c,r:it.r,arc:it}]};if(['line','rect','tri','guide'].includes(it.type))return {segs:itemSegs(it),circles:[]};return null;}
+function itemPrims(it){if(it.type==='circle')return {segs:[],circles:[{c:it.c,r:it.r}]};if(it.type==='arc')return {segs:[],circles:[{c:it.c,r:it.r,arc:it}]};if(['line','rect','tri','guide','poly'].includes(it.type))return {segs:itemSegs(it),circles:[]};return null;}
 function onCirc(cc,pts){return cc.arc?pts.filter(q=>arcHas(cc.arc,Math.atan2(q.y-cc.c.y,q.x-cc.c.x))):pts;}
 function segSeg(a,b,c,d){const r={x:b.x-a.x,y:b.y-a.y},s={x:d.x-c.x,y:d.y-c.y};const den=r.x*s.y-r.y*s.x;if(Math.abs(den)<1e-9)return [];const t=((c.x-a.x)*s.y-(c.y-a.y)*s.x)/den,u=((c.x-a.x)*r.y-(c.y-a.y)*r.x)/den;if(t<-1e-6||t>1+1e-6||u<-1e-6||u>1+1e-6)return [];return [{x:a.x+t*r.x,y:a.y+t*r.y}];}
 function segCircle(a,b,c,r){const d={x:b.x-a.x,y:b.y-a.y},f={x:a.x-c.x,y:a.y-c.y};const A=d.x*d.x+d.y*d.y,B=2*(f.x*d.x+f.y*d.y),C=f.x*f.x+f.y*f.y-r*r;let D=B*B-4*A*C;if(D<0||A===0)return [];D=Math.sqrt(D);const out=[];for(const t of [(-B-D)/(2*A),(-B+D)/(2*A)])if(t>=-1e-6&&t<=1+1e-6)out.push({x:a.x+t*d.x,y:a.y+t*d.y});return out;}
@@ -606,6 +703,11 @@ function render(){
     drawItem(ctx,it,isSel(it)?C('--sel'):null);
     ctx.restore();
   }
+  // base-point markers for move / copy
+  if(mode&&(mode.kind==='copy'||mode.kind==='move')){ctx.save();ctx.lineWidth=2;ctx.strokeStyle=C('--snap');ctx.fillStyle=C('--paper');
+    if(!mode.base){for(const it of modeSrcs())for(const m of snapMarkers(it)){const s=toScreen(m.p);ctx.beginPath();if(m.k==='end')ctx.rect(s.x-6,s.y-6,12,12);else if(m.k==='mid'){ctx.moveTo(s.x,s.y-7);ctx.lineTo(s.x+7,s.y+6);ctx.lineTo(s.x-7,s.y+6);ctx.closePath();}else ctx.arc(s.x,s.y,7,0,7);ctx.fill();ctx.stroke();}}
+    else{const s=toScreen(mode.base);ctx.strokeStyle=C('--sel');ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(s.x,s.y,8,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(s.x-11,s.y);ctx.lineTo(s.x+11,s.y);ctx.moveTo(s.x,s.y-11);ctx.lineTo(s.x,s.y+11);ctx.stroke();}
+    ctx.restore();}
   // temp item while drawing
   if(drag&&drag.temp){for(const t of (drag.temps||[drag.temp])){ctx.save();const f=t.frame?frameOf(t.frame):null;if(f){const a=toScreen({x:f.x,y:f.y});ctx.beginPath();ctx.rect(a.x,a.y,f.w*view.zoom,f.h*view.zoom);ctx.clip();}drawItem(ctx,t,null);ctx.restore();}}
   if(arcDraft){ctx.fillStyle=C('--sel');for(const q of [arcDraft.p0,arcDraft.p1]){if(!q)continue;const s=toScreen(q);ctx.beginPath();ctx.arc(s.x,s.y,4,0,7);ctx.fill();}if(arcDraft.mode==='cse'&&arcDraft.p1){const a=toScreen(arcDraft.p0),b=toScreen(arcDraft.p1);ctx.strokeStyle=C('--sel');ctx.setLineDash([3,3]);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);}}
@@ -706,6 +808,7 @@ function drawItem(c,it,hl){
     case 'free':case 'write':{const p=it.pts.map(S);if(p.length===1){c.arc(p[0].x,p[0].y,c.lineWidth/2,0,7);c.fillStyle=c.strokeStyle;c.fill();c.beginPath();break;}
       c.moveTo(p[0].x,p[0].y);for(let i=1;i<p.length-1;i++){const m={x:(p[i].x+p[i+1].x)/2,y:(p[i].y+p[i+1].y)/2};c.quadraticCurveTo(p[i].x,p[i].y,m.x,m.y);}c.lineTo(p[p.length-1].x,p[p.length-1].y);break;}
     case 'rect':{const a=S(it.p);c.rect(a.x,a.y,it.w*view.zoom,it.h*view.zoom);break;}
+    case 'poly':{it.pts.forEach((q,i)=>{const p=S(q);if(i)c.lineTo(p.x,p.y);else c.moveTo(p.x,p.y);});if(it.closed)c.closePath();break;}
     case 'tri':{const p=triPts(it).map(S);c.moveTo(p[0].x,p[0].y);c.lineTo(p[1].x,p[1].y);c.lineTo(p[2].x,p[2].y);c.closePath();break;}
     case 'circle':{const a=S(it.c);c.arc(a.x,a.y,it.r*view.zoom,0,7);break;}
     case 'arc':{const a=S(it.c);c.arc(a.x,a.y,it.r*view.zoom,it.a0,it.a0+arcSweep(it));break;}
@@ -771,7 +874,7 @@ let twoDown=null,lastTwoTap=0;
 function noteTwoDown(){const t=[...touches.values()];if(t.length===2){twoDown={t:performance.now(),a:t[0],b:t[1]};for(const d of tapDown.values())d.n=2;lastTap=null;tapCount=0;}}
 function noteTouchUp(){if(twoDown&&touches.size===0){const now=performance.now();const ok=now-twoDown.t<300&&!gestureMoved;twoDown=null;if(ok){if(now-lastTwoTap<450){lastTwoTap=0;gestureToggle(gest.two,'แตะสองนิ้วสองครั้ง');}else lastTwoTap=now;}}else if(touches.size===0)twoDown=null;}
 let gestureMoved=false;
-const TOOL_NAMES={guide:'เส้นช่วย',detail:'ขยายรายละเอียด',select:'เลือก',line:'เส้นตรง',free:'วาดอิสระ',rect:'สี่เหลี่ยม',circle:'วงกลม',tri:'สามเหลี่ยม',write:'เขียน',hl:'ปากกาเน้น',pat:'ปากกาลาย',frame:'กรอบ',leader:'ลูกศร',text:'ข้อความ',dim:'บอกระยะ',erase:'ยางลบ',trim:'ตัด',extend:'ต่อ',arc:'ส่วนโค้ง'};
+const TOOL_NAMES={join:'รวมเส้น',guide:'เส้นช่วย',detail:'ขยายรายละเอียด',select:'เลือก',line:'เส้นตรง',free:'วาดอิสระ',rect:'สี่เหลี่ยม',circle:'วงกลม',tri:'สามเหลี่ยม',write:'เขียน',hl:'ปากกาเน้น',pat:'ปากกาลาย',frame:'กรอบ',leader:'ลูกศร',text:'ข้อความ',dim:'บอกระยะ',erase:'ยางลบ',trim:'ตัด',extend:'ต่อ',arc:'ส่วนโค้ง'};
 let penTap=null;
 const WIG_AMP=15,WIG_N=3,WIG_MS=600; // pen wiggle while dragging: 3 direction reversals, each leg >= 15 px, within 0.6 s -> toggle angle lock (permanent)
 function lockableDrag(){if(!drag)return false;const t=drag.tool;if(t==='line'||t==='guide'||t==='tri'||t==='leader'||t==='copy')return true;if(t==='dim')return drag.mode==='free';if(t==='select')return drag.mode==='handle'||drag.mode==='move'||drag.mode==='moveMulti';return false;}
@@ -833,13 +936,17 @@ function beginTool(p,pid){
     case 'frame':{drag={pid,tool,start:p,tempFrame:{x:p.x,y:p.y,w:0,h:0}};break;}
     case 'detail':{if(detailDraft){const D=detailDraft;detailDraft=null;drag={pid,tool,mode:'none'};makeDetail(D,p);break;}drag={pid,tool,mode:'marquee',start:p,rect:null,fid};break;}
     case 'erase':{drag={pid,tool,erased:false};eraseAt(p);break;}
+    case 'join':{drag={pid,tool,mode:'none'};const it=hitItem(p,['line','arc','poly']);if(!it){toast('แตะเส้นตรงหรือส่วนโค้ง');break;}
+      if(!joinFirst||!itemOf(joinFirst)){joinFirst=it.id;sel={kind:'item',id:it.id};showProps();$('#hint').textContent='แตะเส้นที่ 2 ที่จะรวมด้วย · Esc ยกเลิก';break;}
+      if(joinFirst===it.id){toast('แตะเส้นอีกเส้นหนึ่ง');break;}const a=itemOf(joinFirst);joinFirst=null;const r=joinItems(a,it);$('#hint').textContent=HINTS.join;if(r){sel={kind:'item',id:r.id};showProps();if(r.type==='poly'&&!r.closed){joinFirst=r.id;$('#hint').textContent='แตะเส้นถัดไปเพื่อต่อ · Esc หยุด';}}break;}
     case 'trim':case 'extend':{drag={pid,tool,mode:'none'};const ln=hitItem(p,['line','circle','arc']);if(!ln){toast('แตะที่เส้นตรง วงกลม หรือส่วนโค้ง (รูปทรงต้อง "แยกเป็นเส้น" ก่อน)');break;}
       if(ln.type==='line'){if(tool==='trim')trimAt(ln,p);else extendAt(ln,p);}else{if(tool==='trim')trimRound(ln,p);else if(ln.type==='arc')extendRound(ln,p);else toast('วงกลมเต็มวงต่อไม่ได้');}break;}
     case 'dim':{const it=hitItem(p,true);if(it){drag={pid,tool,mode:'none'};const d=addDimFor(it,p);if(d){commit();doc.items.push(d);sel={kind:'item',id:d.id};showProps();}}
       else{const a=snapped(p,fid);drag={pid,tool,mode:'free',frame:fid,start:a,temp:{id:uid(),type:'dim',frame:fid,ref:null,kind:'lin',pa:a,pb:a,off:7,color:'#111111',sw:0.18,unit:dimDef.unit,ts:dimDef.ts,lines:dimDef.lines,orient:dimDef.orient||'aligned',...dimStyleDef()}};}break;}
     case 'select':
       if(mode){const srcs=(mode.srcs||[mode.src]).map(itemOf).filter(Boolean);const src=srcs[0];if(!src){setMode(null);beginSelect(p,pid);break;}
-        if(mode.kind==='copy'){const temps=srcs.map(x=>{const t=clone(x);t.id=uid();return t;});drag={pid,tool:'copy',srcs,start:p,temps,temp:temps[0],moved:false};break;}
+        if(mode.kind==='copy'||mode.kind==='move'){if(!mode.base){mode.base=pickBase(p);$('#hint').textContent=modeHint();showProps();drag={pid,tool:'place',start:p,fresh:true,temps:null};render();break;}
+          drag={pid,tool:'place',start:p,fresh:false,temps:null};placeGhost(p);break;}
         if(mode.kind==='offset'){const fld=$('#offDist');if(fld){const v=parseReal(fld.value);if(v>0)mode.dist=v;}const d=mode.dist/scaleFor(src.frame);const o=offsetItem(src,d,p);if(o){commit();doc.items.push(o);sel={kind:'item',id:o.id};mode.src=o.id;showProps();}else toast('ออฟเซ็ตเข้าด้านในไม่ได้ ระยะใหญ่กว่ารูป');drag={pid,tool:'select',mode:'none'};break;}}
       beginSelect(p,pid);break;
   }
@@ -858,12 +965,9 @@ function moveTool(p){
     case 'frame':{const s=drag.start;drag.tempFrame={x:Math.min(s.x,p.x),y:Math.min(s.y,p.y),w:Math.abs(p.x-s.x),h:Math.abs(p.y-s.y)};break;}
     case 'detail':{if(drag.mode!=='marquee')break;const s=drag.start;drag.rect={x1:Math.min(s.x,p.x),y1:Math.min(s.y,p.y),x2:Math.max(s.x,p.x),y2:Math.max(s.y,p.y)};break;}
     case 'erase':eraseAt(p);break;
-    case 'trim':case 'extend':break;
+    case 'trim':case 'extend':case 'join':break;
     case 'dim':{if(drag.mode!=='free')break;const t=drag.temp;const b=endPoint(t.pa,p,drag.frame,null,true);t.pb=b;if((dimDef.orient||'aligned')==='axis')t.orient=Math.abs(b.x-t.pa.x)>=Math.abs(b.y-t.pa.y)?'h':'v';drag.label=fmtLen(dist(t.pa,t.pb),drag.frame);drag.labelAt=b;break;}
-    case 'copy':{const q=lockAngle(drag.start,p);drag.temps.forEach((t,k)=>Object.assign(t,clone(drag.srcs[k]),{id:t.id}));
-      if(dist(q,drag.start)*view.zoom>4)drag.moved=true;
-      let {dx,dy}=moveDelta(drag.start,p,drag.temps,null);
-      for(const t of drag.temps)if(t.type!=='dim'||!t.ref)moveItem(t,dx,dy,true);drag.dx=dx;drag.dy=dy;drag.label=fmtLen(Math.hypot(dx,dy),drag.temp.frame)+(angleOn()?'  '+angDeg(drag.start,q)+'°':'');drag.labelAt=p;break;}
+    case 'place':{if(drag.fresh){if(dist(p,drag.start)*view.zoom>6)drag.fresh=false;else break;}placeGhost(p);break;}
     case 'select':moveSelect(p);break;
   }
 }
@@ -883,9 +987,10 @@ function endTool(p){
     case 'frame':{const t=d.tempFrame;if(t.w>10&&t.h>10){commit();const f={id:uid(),x:t.x,y:t.y,w:t.w,h:t.h,scale:doc.scale,label:'',grid:true};doc.frames.push(f);sel={kind:'frame',id:f.id};setTool('select');showProps();}break;}
     case 'erase':break;
     case 'detail':{if(d.mode==='marquee'){const r=d.rect;if(r&&r.x2-r.x1>3&&r.y2-r.y1>3)detailDialog(r,d.fid);else toast('ลากกรอบครอบบริเวณที่ต้องการขยาย');}break;}
-    case 'trim':case 'extend':break;
+    case 'trim':case 'extend':case 'join':break;
     case 'dim':if(d.mode==='free'&&dist(d.temp.pa,d.temp.pb)*view.zoom>6){commit();doc.items.push(d.temp);sel={kind:'item',id:d.temp.id};setTool('select');showProps();}else if(d.mode==='free')toast('ลากจากจุดแรกไปจุดที่สอง หรือแตะที่เส้นเพื่อบอกระยะอัตโนมัติ');break;
-    case 'copy':if(d.moved){commit();d.temps.forEach((t,k)=>{doc.items.push(t);for(const dm of dimsOf(d.srcs[k].id)){const c=clone(dm);c.id=uid();c.ref=t.id;doc.items.push(c);}});toast(d.temps.length>1?'วางสำเนา '+d.temps.length+' ชิ้น':'วางสำเนาแล้ว');}break;
+    case 'place':{if(d.fresh){snapMark=null;break;} // the tap that picked the base point
+      if(!d.temps)placeGhostFor(d,p);if(d.temps){placeMode(d.dx,d.dy);}snapMark=null;break;}
     case 'select':endSelect(d,p);break;
   }
 }
@@ -895,7 +1000,7 @@ function eraseAt(p){
   for(let i=doc.items.length-1;i>=0;i--){const it=doc.items[i];let hit=itemDist(p,it)<tol+it.sw/2;if(!hit&&it.type==='hl'&&it.fillAll&&it.clip){let inside=false;for(const lp of it.clip)if(ptInPoly(p,lp))inside=!inside;hit=inside;}if(hit){if(!drag.erased){commit();drag.erased=true;}doc.items.splice(i,1);purgeDims();if(isSel(it)){sel=sel.kind==='multi'?{kind:'multi',ids:sel.ids.filter(x=>x!==it.id)}:null;showProps();}}}
 }
 // select tool
-function hitItem(p,dimOnly){const tol=8/view.zoom;let best=null,bd=Infinity,alt=null,ad=Infinity;const allow=Array.isArray(dimOnly)?dimOnly:['line','rect','tri','circle','arc'];for(const it of doc.items){if(dimOnly&&!allow.includes(it.type))continue;const f=it.frame?frameOf(it.frame):null;if(f&&!(p.x>=f.x&&p.x<=f.x+f.w&&p.y>=f.y&&p.y<=f.y+f.h))continue;let d=itemDist(p,it)-it.sw/2;if(it.type==='hl'&&it.fillAll&&it.clip){let inside=false;for(const lp of it.clip)if(ptInPoly(p,lp))inside=!inside;if(inside)d=0;}if(it.type==='text'){const r=textRect(it);if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h)d=0;}else if(it.type==='leader'){const t=leaderGeom(it).text;if(t.w>0&&p.x>=t.x&&p.x<=t.x+t.w&&p.y>=t.y&&p.y<=t.y+t.h)d=0;}
+function hitItem(p,dimOnly){const tol=8/view.zoom;let best=null,bd=Infinity,alt=null,ad=Infinity;const allow=Array.isArray(dimOnly)?dimOnly:['line','rect','tri','circle','arc','poly'];for(const it of doc.items){if(dimOnly&&!allow.includes(it.type))continue;const f=it.frame?frameOf(it.frame):null;if(f&&!(p.x>=f.x&&p.x<=f.x+f.w&&p.y>=f.y&&p.y<=f.y+f.h))continue;let d=itemDist(p,it)-it.sw/2;if(it.type==='hl'&&it.fillAll&&it.clip){let inside=false;for(const lp of it.clip)if(ptInPoly(p,lp))inside=!inside;if(inside)d=0;}if(it.type==='text'){const r=textRect(it);if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h)d=0;}else if(it.type==='leader'){const t=leaderGeom(it).text;if(t.w>0&&p.x>=t.x&&p.x<=t.x+t.w&&p.y>=t.y&&p.y<=t.y+t.h)d=0;}
     if(d<tol&&d<bd){bd=d;best=it;}if(d<tol&&d<ad&&!(sel&&sel.kind==='item'&&sel.id===it.id)){ad=d;alt=it;}}
   // tap-through: if the nearest is the item already selected but another item is also under the pen, pick the other one
   if(!dimOnly&&best&&sel&&sel.kind==='item'&&sel.id===best.id&&alt&&ad<tol)return alt;return best;}
@@ -908,12 +1013,14 @@ function handlesOf(it){switch(it.type){
   case 'circle':return [0,Math.PI/2,Math.PI,-Math.PI/2].map(a=>({k:'r',p:{x:it.c.x+it.r*Math.cos(a),y:it.c.y+it.r*Math.sin(a)}}));
   case 'arc':return [{k:'a0',p:arcPt(it,it.a0)},{k:'a1',p:arcPt(it,it.a1)},{k:'m',p:arcPt(it,it.a0+arcSweep(it)/2)}];
   case 'tri':return [{k:'v2',p:triPts(it)[1]}];
+  case 'poly':return it.pts.map((p,i)=>({k:'v'+i,p}));
   case 'leader':{const g=leaderGeom(it);const h=[{k:'p1',p:it.p1},{k:'p2',p:it.p2}];if(g.sh>0||it.text)h.push({k:'s2',p:g.s2});return h;}
   case 'dim':{const g=dimGeom(it);if(!g||g.kind!=='lin')return [];return [{k:'a',p:g.a},{k:'b',p:g.b}];}
   }return [];}
 function itemHandle(p){if(!sel||sel.kind!=='item')return null;const it=itemOf(sel.id);if(!it)return null;const tol=(it.type==='dim'?16:12)/view.zoom;let best=null,bd=tol;for(const h of handlesOf(it)){const d=dist(p,h.p);if(d<bd){bd=d;best=h;}}return best?{it,k:best.k,d:bd}:null;}
 function applyHandle(it,o,k,q){ // o = original item, q = new handle position (paper)
   if(it.type==='dim'){const g=dimGeom(o);if(!g||g.kind!=='lin')return;it.ref=null;it.seg=undefined;it.pa={...g.a};it.pb={...g.b};if(k==='a')it.pa=q;else it.pb=q;return;}
+  if(it.type==='poly'){const i=parseInt(k.slice(1));if(it.pts[i])it.pts[i]={x:q.x,y:q.y};return;}
   if(it.type==='leader'&&k==='s2'){const right=o.p2.x>=o.p1.x;it.sh=Math.max(0,Math.round((q.x-o.p2.x)*(right?1:-1)*2)/2);return;}
   if(it.type==='line'||it.type==='leader'||it.type==='guide'){if(k==='p1')it.p1=q;else it.p2=q;}
   else if(it.type==='rect'){const x1=o.p.x,y1=o.p.y,x2=o.p.x+o.w,y2=o.p.y+o.h;let nx1=x1,ny1=y1,nx2=x2,ny2=y2;
@@ -922,7 +1029,7 @@ function applyHandle(it,o,k,q){ // o = original item, q = new handle position (p
   else if(it.type==='circle'){it.r=Math.max(0.1,dist(o.c,q));}
   else if(it.type==='arc'){if(k==='m'){const t=arc3(arcPt(o,o.a0),arcPt(o,o.a1),q);if(t)Object.assign(it,{c:t.c,r:t.r,a0:t.a0,a1:t.a1});}else{const ang=Math.atan2(q.y-o.c.y,q.x-o.c.x);if(k==='a0')it.a0=ang;else it.a1=ang;}}
   else if(it.type==='tri'){it.side=Math.max(0.1,dist(o.p1,q));it.ang=Math.atan2(q.y-o.p1.y,q.x-o.p1.x);}}
-function handleFixed(o,k){if(o.type==='dim'){const g=dimGeom(o);return g&&g.kind==='lin'?(k==='a'?g.b:g.a):null;}if(o.type==='leader'&&k==='s2')return null;if(o.type==='line'||o.type==='leader'||o.type==='guide')return k==='p1'?o.p2:o.p1;if(o.type==='circle')return o.c;if(o.type==='arc')return k==='m'?null:o.c;if(o.type==='tri')return o.p1;if(o.type==='rect'){const q=rectPts(o);return {nw:q[2],ne:q[3],se:q[0],sw:q[1]}[k];}return null;}
+function handleFixed(o,k){if(o.type==='poly')return null;if(o.type==='dim'){const g=dimGeom(o);return g&&g.kind==='lin'?(k==='a'?g.b:g.a):null;}if(o.type==='leader'&&k==='s2')return null;if(o.type==='line'||o.type==='leader'||o.type==='guide')return k==='p1'?o.p2:o.p1;if(o.type==='circle')return o.c;if(o.type==='arc')return k==='m'?null:o.c;if(o.type==='tri')return o.p1;if(o.type==='rect'){const q=rectPts(o);return {nw:q[2],ne:q[3],se:q[0],sw:q[1]}[k];}return null;}
 let lastDimTap=null;
 function beginSelect(p,pid){
   { // pen double-tap on a dimension's number: move just the number (a leader keeps it tied to the dimension)
@@ -954,8 +1061,7 @@ function moveSelect(p){
   if(d.mode==='move'||d.mode==='moveMulti'||d.mode==='moveFrame'){const q=lockAngle(d.start,p);dx=q.x-d.start.x;dy=q.y-d.start.y;
     const fr=d.mode==='move'?d.it.frame:(d.mode==='moveMulti'?d.its[0].frame:null);d.label=fmtLen(Math.hypot(dx,dy),fr)+(angleOn()?'  '+angDeg(d.start,q)+'°':'');d.labelAt=p;}
   if(d.mode==='moveMulti'){const ex=new Set(d.its.map(i=>i.id));d.its.forEach((it,k)=>Object.assign(it,clone(d.origs[k])));
-    ({dx,dy}=moveDelta(d.start,p,d.its,ex));
-    for(const it of d.its)if(it.type!=='dim'||!it.ref)moveItem(it,dx,dy,true);return;}
+    snapMark=null;for(const it of d.its)if(it.type!=='dim'||!it.ref)moveItem(it,dx,dy,true);return;}
   if(d.mode==='dimText'){const it=d.it,o=d.orig;const g=dimGeom(it);if(!g)return;const base=dimBase(g);const tp0=dimTextPos(Object.assign({},o,{toff:null}),g);
     const s0=o.toff?{x:base.x+o.toff.x,y:base.y+o.toff.y}:tp0.p;const np={x:s0.x+dx,y:s0.y+dy};
     if(dist(np,tp0.p)<it.ts*0.8){it.toff=null;d.label='คืนตำแหน่ง';}else{it.toff={x:np.x-base.x,y:np.y-base.y};d.label='ย้ายตัวเลข';}d.labelAt=p;showProps();return;}
@@ -969,8 +1075,7 @@ function moveSelect(p){
     const it=d.it;const o=d.orig;
     // restore then move, snapping item's snap points to others
     Object.assign(it,clone(o));
-    if(it.type!=='write'&&it.type!=='dim'){({dx,dy}=moveDelta(d.start,p,[it],new Set([it.id])));}
-    moveItem(it,dx,dy);showProps();
+    snapMark=null;moveItem(it,dx,dy);showProps();
   }else if(d.mode==='moveFrame'){({dx,dy}=frameSnap(d.orig,dx,dy));d.f.x=d.orig.x+dx;d.f.y=d.orig.y+dy;
     for(const it of doc.items)if(it.frame===d.f.id){/* items keep paper coords: move with frame */}
     if(!d.itemsOrig){d.itemsOrig=doc.items.filter(i=>i.frame===d.f.id).map(i=>clone(i));}
@@ -1002,11 +1107,11 @@ function el(html){const t=document.createElement('template');t.innerHTML=html.tr
 function showProps(focusText){
   props.innerHTML='';
   if(mode){props.hidden=false;const src=mode.srcs?mode.srcs.map(itemOf).filter(Boolean).length:itemOf(mode.src);if(!src){mode=null;return showProps();}
-    if(mode.kind==='copy'){props.append(el(`<span class="lbl"><b>คัดลอก</b> · ลากจากจุดอ้างอิงไปตำแหน่งใหม่ · ทำซ้ำได้</span>`));}
+    if(mode.kind==='copy'||mode.kind==='move'){props.append(el(`<span class="lbl"><b>${mode.kind==='move'?'ย้าย':'คัดลอก'}</b> · ${mode.base?'แตะ/ลากไปจุดปลายทาง':'แตะจุดอ้างอิง (□ ปลาย △ กึ่งกลาง ○ ศูนย์กลาง)'}</span>`));if(mode.base){const rb=el(`<button class="btn">เลือกจุดอ้างอิงใหม่</button>`);rb.addEventListener('click',()=>{mode.base=null;$('#hint').textContent=modeHint();showProps();render();});props.append(rb);}}
     else{props.append(el(`<span class="lbl"><b>ออฟเซ็ต</b> · แตะด้านที่ต้องการ</span>`));const w=el(`<span class="grp"><span class="lbl">ระยะ</span><input class="num" inputmode="decimal" id="offDist"></span>`);const i=w.querySelector('input');i.value=fmtReal(mode.dist).replace(/ .*$/,'');i.addEventListener('keydown',e=>{if(e.key==='Enter')i.blur();});const takeVal=()=>{const v=parseReal(i.value);if(v>0){mode.dist=v;offsetDef=v;try{localStorage.setItem('ss:offset',String(v));}catch(e){}return true;}return false;};
     i.addEventListener('input',takeVal); // live: the pen tap on the canvas may come before the field blurs
     i.addEventListener('change',()=>{if(!takeVal())i.value=fmtReal(mode.dist).replace(/ .*$/,'');});props.append(w);props.append(el(`<span class="lbl">(หน่วย ${doc.unit==='m'?'ม.':doc.unit==='cm'?'ซม.':'มม.'})</span>`));}
-    const done=el(`<button class="btn primary">เสร็จ</button>`);done.addEventListener('click',()=>{sel=null;setMode(null);});props.append(done);return;}
+    const done=el(`<button class="btn primary">${mode.kind==='move'?'ยกเลิก':'เสร็จ'}</button>`);done.addEventListener('click',()=>{if(mode.kind!=='move')sel=null;setMode(null);});props.append(done);return;}
   if(!sel){props.hidden=true;return;}
   props.hidden=false;
   if(sel.kind==='multi'){const its=sel.ids.map(itemOf).filter(Boolean);if(its.length<2){sel=its.length?{kind:'item',id:its[0].id}:null;return showProps();}
@@ -1014,7 +1119,7 @@ function showProps(focusText){
     const sw=el(`<span class="grp"></span>`);for(const w of WIDTHS){const b=el(`<button class="wbtn" title="${w} มม."><i style="height:${Math.max(1,w*4)}px"></i></button>`);b.addEventListener('click',()=>{commit();its.forEach(i=>{if(i.type!=='dim')i.sw=w;});render();});sw.append(b);}props.append(sw);
     const sl=el(`<span class="grp"></span>`);for(const k in LSTYLES){const b=el(`<button class="wbtn" title="${LSTYLES[k].n}">${lsIcon(k,48)}</button>`);b.addEventListener('click',()=>{commit();its.forEach(i=>{if(i.type!=='dim')i.ls=k;});render();});sl.append(b);}props.append(sl);
     const sc=el(`<span class="grp"></span>`);for(const c of COLORS){const b=el(`<button class="sw" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();its.forEach(i=>i.color=c);render();});sc.append(b);}props.append(sc);
-    const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',srcs:sel.ids.slice()}));props.append(bc);
+    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',srcs:sel.ids.slice()}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',srcs:sel.ids.slice()}));props.append(bc);const cp=el(`<button class="btn" title="คัดลอกไว้ แล้วไปวางหน้าอื่นหรือกรอบอื่นได้">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip(sel.ids));props.append(cp);if(its.filter(i=>['line','poly','arc'].includes(i.type)).length>=2){const jb=el(`<button class="btn">รวมเส้นแนวเดียวกัน</button>`);jb.addEventListener('click',()=>joinSelected(sel.ids));props.append(jb);const jc=el(`<button class="btn primary">รวมเป็นรูปเดียว</button>`);jc.addEventListener('click',()=>joinChain(sel.ids));props.append(jc);}
     const bf=el(`<button class="btn">เข้ากรอบ…</button>`);bf.addEventListener('click',()=>assignFrameDialog(sel.ids.slice()));props.append(bf);
     const del=el(`<button class="btn danger">ลบ</button>`);del.addEventListener('click',()=>{commit();const ids=new Set(sel.ids);doc.items=doc.items.filter(x=>!ids.has(x.id));purgeDims();sel=null;showProps();render();});props.append(del);
     return;}
@@ -1066,7 +1171,7 @@ function showProps(focusText){
       const hz=el(`<span class="grp"><span class="lbl">ขนาดหัว</span><select class="sel"></select></span>`);const z=hz.querySelector('select');for(const v of [1.5,2,2.5,3,4,5])z.append(new Option(v+' มม.',v));z.value=String(it.hs||2.5);z.addEventListener('change',()=>{commit();it.hs=parseFloat(z.value);textDef.hs=it.hs;saveTextDef();render();});props.append(hz);
       const sw=el(`<span class="grp"></span>`);for(const w of WIDTHS){const b=el(`<button class="wbtn${it.sw===w?' on':''}" title="${w} มม."><i style="height:${Math.max(1,w*4)}px"></i></button>`);b.addEventListener('click',()=>{commit();it.sw=w;render();showProps();});sw.append(b);}props.append(sw);}
     const sc=el(`<span class="grp"></span>`);for(const c of COLORS){const b=el(`<button class="sw${it.color===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.color=c;render();showProps();});sc.append(b);}props.append(sc);
-    const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);
+    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);
     const del=el(`<button class="btn danger">ลบ</button>`);del.addEventListener('click',()=>{commit();doc.items=doc.items.filter(x=>x.id!==it.id);sel=null;showProps();render();});props.append(del);
     if(focusText)setTimeout(()=>ta.focus(),50);
     return;
@@ -1079,9 +1184,9 @@ function showProps(focusText){
     if(isPat){const pc=el(`<span class="grp"><span class="lbl">สีลาย</span></span>`);for(const c of COLORS){const b=el(`<button class="sw${it.pc===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.pc=c;render();showProps();});pc.append(b);}props.append(pc);}
     const sc=el(`<span class="grp"><span class="lbl">สีพื้น</span></span>`);const nb=el(`<button class="sw${!it.color?' on':''}" style="background:transparent;position:relative" title="ไม่มีสีพื้น"><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px">∅</span></button>`);nb.addEventListener('click',()=>{commit();it.color=null;render();showProps();});sc.append(nb);for(const c of HL_COLORS){const b=el(`<button class="sw${it.color===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.color=c;render();showProps();});sc.append(b);}props.append(sc);
     props.append(el(`<span class="lbl">${it.fillAll?'เติมเต็มพื้นที่ปิด':it.clip?'จำกัดในพื้นที่ปิด':'ระบายอิสระ'}</span>`));
-    const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);
+    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);
     const del=el(`<button class="btn danger">ลบ</button>`);del.addEventListener('click',()=>{commit();doc.items=doc.items.filter(x=>x.id!==it.id);sel=null;showProps();render();});props.append(del);return;}
-  const names={line:'เส้นตรง',free:'เส้นอิสระ',write:'ลายมือ',rect:'สี่เหลี่ยม',circle:'วงกลม',tri:'สามเหลี่ยมด้านเท่า',arc:'ส่วนโค้ง'};
+  const names={line:'เส้นตรง',free:'เส้นอิสระ',write:'ลายมือ',rect:'สี่เหลี่ยม',circle:'วงกลม',tri:'สามเหลี่ยมด้านเท่า',arc:'ส่วนโค้ง',poly:'รูปหลายเหลี่ยม'};
   props.append(el(`<span class="lbl">${names[it.type]}${fid?' · '+fmtScale(scaleFor(fid)):''}</span>`));
   const fr=v=>fmtLen(v,fid).replace(/ .*$/,'');
   if(it.type==='line')field('ยาว',fr(dist(it.p1,it.p2)),pm=>{const a=Math.atan2(it.p2.y-it.p1.y,it.p2.x-it.p1.x);it.p2={x:it.p1.x+pm*Math.cos(a),y:it.p1.y+pm*Math.sin(a)};});
@@ -1092,16 +1197,17 @@ function showProps(focusText){
   else if(it.type==='arc'){field('รัศมี',fr(it.r),pm=>{it.r=pm;});props.append(el(`<span class="lbl">มุม ${Math.round(arcSweep(it)*180/Math.PI)}° · ยาวโค้ง ${fmtLen(it.r*arcSweep(it),fid)}</span>`));}
   else if(it.type==='tri')field('ด้าน',fr(it.side),pm=>{it.side=pm;});
   else if(it.type==='free')props.append(el(`<span class="lbl">ยาวรวม ${fmtLen(itemSegs(it).reduce((s,[a,b])=>s+dist(a,b),0),fid)}</span>`));
+  else if(it.type==='poly'){props.append(el(`<span class="lbl">${it.pts.length} จุด · ${it.closed?'ปิด':'เปิด'} · ยาวรวม ${fmtLen(itemSegs(it).reduce((s,[a,b])=>s+dist(a,b),0),fid)}</span>`));const cb=el(`<button class="btn">${it.closed?'เปิดรูป':'ปิดรูป'}</button>`);cb.addEventListener('click',()=>{commit();it.closed=!it.closed;render();showProps();});props.append(cb);}
   if(it.type!=='write')props.append(el(`<span class="lbl">(หน่วย ${doc.unit==='m'?'ม.':doc.unit==='cm'?'ซม.':'มม.'})</span>`));
   // stroke
   const sw=el(`<span class="grp"></span>`);for(const w of WIDTHS){const b=el(`<button class="wbtn${it.sw===w?' on':''}" title="${w} มม."><i style="height:${Math.max(1,w*4)}px"></i></button>`);b.addEventListener('click',()=>{commit();it.sw=w;render();showProps();});sw.append(b);}props.append(sw);
   const sl=el(`<span class="grp"></span>`);for(const k in LSTYLES){const b=el(`<button class="wbtn${(it.ls||'solid')===k?' on':''}" title="${LSTYLES[k].n}">${lsIcon(k,48)}</button>`);b.addEventListener('click',()=>{commit();it.ls=k;render();showProps();});sl.append(b);}props.append(sl);
   const sc=el(`<span class="grp"></span>`);for(const c of COLORS){const b=el(`<button class="sw${it.color===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.color=c;render();showProps();});sc.append(b);}props.append(sc);
-  if(it.type!=='dim'){const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);}
-  if(it.type==='rect'||it.type==='tri'){const bx=el(`<button class="btn">แยกเป็นเส้น</button>`);bx.addEventListener('click',()=>explodeItem(it));props.append(bx);}
+  if(it.type!=='dim'){const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);}
+  if(it.type==='rect'||it.type==='tri'||it.type==='poly'){const bx=el(`<button class="btn">แยกเป็นเส้น</button>`);bx.addEventListener('click',()=>explodeItem(it));props.append(bx);}
   if(it.type!=='dim'&&it.type!=='write'){const bf=el(`<button class="btn">เข้ากรอบ…</button>`);bf.addEventListener('click',()=>assignFrameDialog([it.id]));props.append(bf);}
   if(['line','rect','tri','circle','arc'].includes(it.type)){const bo=el(`<button class="btn">ออฟเซ็ต</button>`);bo.addEventListener('click',()=>setMode({kind:'offset',src:it.id,dist:offsetDef}));props.append(bo);}
-  if(['line','rect','tri','circle','arc'].includes(it.type)){const bd=el(`<button class="btn">＋ บอกระยะ</button>`);bd.addEventListener('click',()=>{const bb=itemBBox(it);const d=addDimFor(it,{x:bb.x1,y:bb.y1-1});if(d){commit();doc.items.push(d);sel={kind:'item',id:d.id};showProps();render();}});props.append(bd);}
+  if(['line','rect','tri','circle','arc','poly'].includes(it.type)){const bd=el(`<button class="btn">＋ บอกระยะ</button>`);bd.addEventListener('click',()=>{const bb=itemBBox(it);const d=addDimFor(it,{x:bb.x1,y:bb.y1-1});if(d){commit();doc.items.push(d);sel={kind:'item',id:d.id};showProps();render();}});props.append(bd);}
   const del=el(`<button class="btn danger">ลบ</button>`);del.addEventListener('click',()=>{commit();doc.items=doc.items.filter(x=>x.id!==it.id);purgeDims();sel=null;showProps();render();});props.append(del);
 }
 function scalePicker(cur,apply){
@@ -1134,23 +1240,26 @@ $('#zoomtag').addEventListener('click',()=>{fitView();render();});
 document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')return;
   if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();e.shiftKey?redo():undo();}
   else if((e.ctrlKey||e.metaKey)&&e.key==='y'){e.preventDefault();redo();}
+  else if((e.ctrlKey||e.metaKey)&&e.key==='c'&&sel&&sel.kind!=='frame'){e.preventDefault();copyToClip(selIds());}
+  else if((e.ctrlKey||e.metaKey)&&e.key==='v'){e.preventDefault();pasteClip();}
   else if((e.key==='Delete'||e.key==='Backspace')&&sel){commit();if(sel.kind==='item'){doc.items=doc.items.filter(x=>x.id!==sel.id);purgeDims();}else if(sel.kind==='multi'){const ids=new Set(sel.ids);doc.items=doc.items.filter(x=>!ids.has(x.id));purgeDims();}else{doc.frames=doc.frames.filter(x=>x.id!==sel.id);doc.items=doc.items.filter(i=>i.frame!==sel.id);}sel=null;showProps();render();}
-  else if(e.key==='Escape'){if(detailDraft){detailDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(arcDraft){arcDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(mode)setMode(null);else{sel=null;showProps();hideMenus();render();}}
-  else{const k={v:'select',l:'line',p:'free',r:'rect',c:'circle',t:'tri',w:'write',f:'frame',e:'erase',d:'dim',n:'leader',x:'text',h:'hl',t:'trim',g:'extend',k:'arc',j:'pat'}[e.key];if(k)setTool(k);else if(e.key==='a'||e.key==='A')toggleAngle();else if(e.key==='c'&&sel&&sel.kind==='multi'){setMode({kind:'copy',srcs:sel.ids.slice()});}else if(e.key==='c'&&sel&&sel.kind==='item'){const it=itemOf(sel.id);if(it&&it.type!=='dim')setMode({kind:'copy',src:it.id});}else if(e.key==='o'&&sel&&sel.kind==='item'){const it=itemOf(sel.id);if(it&&['line','rect','tri','circle','arc'].includes(it.type))setMode({kind:'offset',src:it.id,dist:offsetDef});}}
+  else if(e.key==='Escape'){if(joinFirst){joinFirst=null;$('#hint').textContent=HINTS[tool]||'';sel=null;showProps();render();}else if(detailDraft){detailDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(arcDraft){arcDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(mode)setMode(null);else{sel=null;showProps();hideMenus();render();}}
+  else{const k={v:'select',l:'line',p:'free',r:'rect',c:'circle',t:'tri',w:'write',f:'frame',e:'erase',d:'dim',n:'leader',x:'text',h:'hl',t:'trim',g:'extend',k:'arc',j:'pat'}[e.key];if(k)setTool(k);else if(e.key==='a'||e.key==='A')toggleAngle();else if(e.key==='c'&&sel&&sel.kind==='multi'){setMode({kind:'copy',srcs:sel.ids.slice()});}else if(e.key==='c'&&sel&&sel.kind==='item'){const it=itemOf(sel.id);if(it&&it.type!=='dim')setMode({kind:'copy',src:it.id});}else if(e.key==='m'&&sel&&sel.kind==='multi'){setMode({kind:'move',srcs:sel.ids.slice()});}else if(e.key==='m'&&sel&&sel.kind==='item'){setMode({kind:'move',src:sel.id});}else if(e.key==='o'&&sel&&sel.kind==='item'){const it=itemOf(sel.id);if(it&&['line','rect','tri','circle','arc'].includes(it.type))setMode({kind:'offset',src:it.id,dist:offsetDef});}}
 });
 
 // ---------- tools UI ----------
-const HINTS={select:'แตะเพื่อเลือก · ลากที่ว่างเพื่อเลือกหลายชิ้น · ลากชิ้นเพื่อย้าย',line:'ลากเส้นตรง · snap ปลาย/กึ่งกลางเส้นในกรอบเดียวกัน',free:'วาดอิสระ · ปลายเส้น snap ได้',rect:'ลากจากมุมถึงมุม',circle:'ลากจากจุดศูนย์กลางออกไป',tri:'ลากด้านแรกของสามเหลี่ยมด้านเท่า',write:'เขียนตัวหนังสือด้วยลายมือ · ไม่ขึ้นกับสเกล',frame:'ลากตีกรอบ แล้วตั้งสเกลของกรอบ · ลากมุมเพื่อขยาย',erase:'แตะหรือลากผ่านเส้นเพื่อลบทั้งเส้น · ท่าทางนิ้วตั้งได้ที่เมนู ☰',dim:'แตะเส้น/รูปทรง = บอกระยะอัตโนมัติ · ลากจากจุดถึงจุด = บอกระยะอิสระ · เลือกแล้วลากปลายเพื่อย้ายจุดวัด · จิ้มตัวเลข 2 ครั้งเพื่อย้ายตัวเลข',leader:'ลากจากจุดที่ชี้ (หัว) ไปยังที่วางข้อความ (หาง) แล้วพิมพ์',hl:'ปากกาเน้น โปร่งแสง · ตั้งความกว้าง สี และ "ไม่ทะลุเส้น" ที่ปุ่มด้านล่าง',pat:'ปากกาลาย: ระบายลวดลายวัสดุ · ตั้งลาย ระยะ มุม สี ที่ปุ่มความหนา/สี',arc:'ส่วนโค้ง: แตะจุดเริ่ม แตะจุดจบ แล้วลากกำหนดความโค้ง (เปลี่ยนวิธีที่ปุ่ม)',trim:'ตัด: แตะช่วงของเส้นตรงที่ต้องการให้หายไป (ตัดถึงเส้นที่ตัดผ่านซ้าย/ขวา)',extend:'ต่อ: แตะเส้นตรงใกล้ปลายที่ต้องการยืด ไปชนเส้นถัดไปในแนวเดียวกัน',text:'แตะตำแหน่งที่ต้องการ แล้วพิมพ์ข้อความ',detail:'ขยายรายละเอียด: ลากกรอบครอบบริเวณที่ต้องการขยาย แล้วเลือกสเกล',guide:'เส้นช่วยจัดหน้า: ลากเหมือนเส้นตรง · snap ได้ทุกกรอบ ทุกสเกล รวมมุมกรอบ · ไม่พิมพ์ลง PDF'};
-function setTool(t){tool=t;if(mode){mode=null;}arcDraft=null;detailDraft=null;if(typeof syncHlBtns==='function')syncHlBtns();document.querySelectorAll('.tool[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t||(t==='detail'&&b.dataset.tool==='frame')||(t==='guide'&&b.dataset.tool==='line')));$('#hint').textContent=HINTS[t]||'';cv.style.cursor=t==='select'?'default':'crosshair';if(t!=='select'&&sel&&sel.kind==='frame'){sel=null;showProps();render();}}
+const HINTS={select:'แตะเพื่อเลือก · ลากที่ว่างเพื่อเลือกหลายชิ้น · ลากชิ้นเพื่อย้าย',line:'ลากเส้นตรง · snap ปลาย/กึ่งกลางเส้นในกรอบเดียวกัน',free:'วาดอิสระ · ปลายเส้น snap ได้',rect:'ลากจากมุมถึงมุม',circle:'ลากจากจุดศูนย์กลางออกไป',tri:'ลากด้านแรกของสามเหลี่ยมด้านเท่า',write:'เขียนตัวหนังสือด้วยลายมือ · ไม่ขึ้นกับสเกล',frame:'ลากตีกรอบ แล้วตั้งสเกลของกรอบ · ลากมุมเพื่อขยาย',erase:'แตะหรือลากผ่านเส้นเพื่อลบทั้งเส้น · ท่าทางนิ้วตั้งได้ที่เมนู ☰',dim:'แตะเส้น/รูปทรง = บอกระยะอัตโนมัติ · ลากจากจุดถึงจุด = บอกระยะอิสระ · เลือกแล้วลากปลายเพื่อย้ายจุดวัด · จิ้มตัวเลข 2 ครั้งเพื่อย้ายตัวเลข',leader:'ลากจากจุดที่ชี้ (หัว) ไปยังที่วางข้อความ (หาง) แล้วพิมพ์',hl:'ปากกาเน้น โปร่งแสง · ตั้งความกว้าง สี และ "ไม่ทะลุเส้น" ที่ปุ่มด้านล่าง',pat:'ปากกาลาย: ระบายลวดลายวัสดุ · ตั้งลาย ระยะ มุม สี ที่ปุ่มความหนา/สี',arc:'ส่วนโค้ง: แตะจุดเริ่ม แตะจุดจบ แล้วลากกำหนดความโค้ง (เปลี่ยนวิธีที่ปุ่ม)',trim:'ตัด: แตะช่วงของเส้นตรงที่ต้องการให้หายไป (ตัดถึงเส้นที่ตัดผ่านซ้าย/ขวา)',extend:'ต่อ: แตะเส้นตรงใกล้ปลายที่ต้องการยืด ไปชนเส้นถัดไปในแนวเดียวกัน',text:'แตะตำแหน่งที่ต้องการ แล้วพิมพ์ข้อความ',detail:'ขยายรายละเอียด: ลากกรอบครอบบริเวณที่ต้องการขยาย แล้วเลือกสเกล',guide:'เส้นช่วยจัดหน้า: ลากเหมือนเส้นตรง · snap ได้ทุกกรอบ ทุกสเกล รวมมุมกรอบ · ไม่พิมพ์ลง PDF',join:'รวมเส้น: แตะเส้นที่ 1 แล้วแตะเส้นที่ 2 · ปลายชนกัน = ต่อเป็นรูปเดียว · แนวเดียวกัน = รวมเป็นเส้นเดียว · ต่างแนวไม่ชน = ปิดมุม · หรือลากกรอบเลือกทั้งรูปแล้วกด "รวมเป็นรูปเดียว"'};
+function setTool(t){tool=t;if(mode){mode=null;}arcDraft=null;detailDraft=null;joinFirst=null;if(typeof syncHlBtns==='function')syncHlBtns();document.querySelectorAll('.tool[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t||(t==='detail'&&b.dataset.tool==='frame')||(t==='guide'&&b.dataset.tool==='line')||(t==='join'&&b.dataset.tool==='extend')));$('#hint').textContent=HINTS[t]||'';cv.style.cursor=t==='select'?'default':'crosshair';if(t!=='select'&&sel&&sel.kind==='frame'){sel=null;showProps();render();}}
 document.querySelectorAll('.tool[data-tool]').forEach(b=>b.addEventListener('click',()=>{hideMenus();const t=b.dataset.tool;
   if(t==='dim')return toolMenu(b,'บอกระยะ',DIM_MODES,dimDef.orient||'aligned',k=>{dimDef.orient=k;markDirty();syncModeLbls();setTool('dim');});
   if(t==='arc')return toolMenu(b,'ส่วนโค้ง',ARC_MODES,arcMode,k=>{arcMode=k;try{localStorage.setItem('ss:arc',k);}catch(e){}syncModeLbls();setTool('arc');});
   if(t==='frame')return toolMenu(b,'กรอบ',FRAME_MODES,frameMode,k=>{frameMode=k;syncModeLbls();setTool(k==='detail'?'detail':'frame');});
   if(t==='line')return toolMenu(b,'เส้นตรง',LINE_MODES,lineMode,k=>{lineMode=k;syncModeLbls();setTool(k);});
+  if(t==='extend')return toolMenu(b,'ต่อ / รวม',EXT_MODES,extMode,k=>{extMode=k;syncModeLbls();setTool(k);});
   setTool(t);}));
 function toolMenu(btn,title,opts,cur,onPick){const n=el(`<div><span class="lbl">${title}</span><div class="row" style="flex-direction:column;align-items:stretch"></div></div>`);const r=n.querySelector('.row');
   for(const [k,lab] of opts){const b=el(`<button class="btn${k===cur?' primary':''}" style="justify-content:flex-start">${lab}</button>`);b.addEventListener('click',()=>{hideMenus();onPick(k);});r.append(b);}popAt(btn,n);}
-function syncModeLbls(){const dm=DIM_MODES.find(m=>m[0]===(dimDef.orient||'aligned'));$('#dimModeLbl').textContent=dm?dm[1]:'';const am=ARC_MODES.find(m=>m[0]===arcMode);$('#arcModeLbl').textContent=am?am[1]:'';$('#bDim').classList.add('has-menu');$('#bArc').classList.add('has-menu');$('#frameModeLbl').textContent=frameMode==='detail'?'ขยาย':'ใหม่';$('#lineModeLbl').textContent=lineMode==='guide'?'เส้นช่วย':'ปกติ';$('#bLine').classList.add('has-menu');$('#bFrame').classList.add('has-menu');}
+function syncModeLbls(){const dm=DIM_MODES.find(m=>m[0]===(dimDef.orient||'aligned'));$('#dimModeLbl').textContent=dm?dm[1]:'';const am=ARC_MODES.find(m=>m[0]===arcMode);$('#arcModeLbl').textContent=am?am[1]:'';$('#bDim').classList.add('has-menu');$('#bArc').classList.add('has-menu');$('#frameModeLbl').textContent=frameMode==='detail'?'ขยาย':'ใหม่';$('#lineModeLbl').textContent=lineMode==='guide'?'เส้นช่วย':'ปกติ';$('#bLine').classList.add('has-menu');$('#extModeLbl').textContent=extMode==='join'?'รวมเส้น':'ไปชน';$('#bExtend').classList.add('has-menu');$('#bFrame').classList.add('has-menu');}
 function toggleAngle(){angleLock=!angleLock;angleTemp=null;$('#bAngle').classList.remove('temp');$('#bAngle').classList.toggle('on',angleLock);try{localStorage.setItem('ss:angle',angleLock?'1':'0');}catch(e){}toast(angleLock?'ล็อกมุมทุก 15° (เส้นตรง/สามเหลี่ยม)':'ปลดล็อกมุม');refreshDrag();}
 $('#bAngle').addEventListener('click',toggleAngle);
 function hideMenus(){document.querySelectorAll('.pop,.menu').forEach(p=>p.remove());}
@@ -1183,11 +1292,13 @@ $('#bMenu').addEventListener('click',()=>{const n=el(`<div class="menu pop">
   <button class="btn" data-a="import">⬆ นำเข้าไฟล์สำรอง</button>
   <button class="btn" data-a="pdf">🖨 ส่งออก PDF ตามสเกล</button>
   <button class="btn" data-a="gest">☝ ท่าทางนิ้ว (แตะสองครั้ง/สามครั้ง/สองนิ้ว)</button>
+  <button class="btn" data-a="paste" id="mPaste">📋 วาง</button>
   <button class="btn" data-a="pgdup">⧉ ทำสำเนาหน้านี้</button>
   <button class="btn" data-a="pgdel">✕ ลบหน้านี้</button>
-  <button class="btn" data-a="clearframes">✕ ล้างทั้งหน้า</button><button class="btn primary" data-a="install" id="mInstall" hidden>⬇ ติดตั้งเป็นแอปบนเครื่องนี้</button></div>`);if(installEvt)n.querySelector('#mInstall').hidden=false;
+  <button class="btn" data-a="clearframes">✕ ล้างทั้งหน้า</button><button class="btn primary" data-a="install" id="mInstall" hidden>⬇ ติดตั้งเป็นแอปบนเครื่องนี้</button></div>`);if(installEvt)n.querySelector('#mInstall').hidden=false;{const mp=n.querySelector('#mPaste');if(clip&&clip.items.length)mp.textContent='📋 วาง ('+clip.items.length+' ชิ้นที่คัดลอกไว้)';else mp.disabled=true;}
   n.addEventListener('click',e=>{const a=e.target.closest('[data-a]');if(!a)return;hideMenus();menuAction(a.dataset.a);});$('#stage').append(n);});
 async function menuAction(a){
+  if(a==='paste')return pasteClip();
   if(a==='install'){if(!installEvt)return;installEvt.prompt();const r=await installEvt.userChoice;if(r&&r.outcome==='accepted'){installEvt=null;toast('ติดตั้งแล้ว เปิดได้จากหน้าจอหลัก');}return;}
   if(a==='home')return showHome();
   if(a==='new'){await saveNow();openDoc(newDoc());return;}
@@ -1207,7 +1318,7 @@ $('#fileIn').addEventListener('change',async e=>{const f=e.target.files[0];e.tar
 // ---------- home / doc list ----------
 const overlay=$('#overlay');
 function scaleItemGeom(it,k,o){const sc=p=>{p.x=o.x+(p.x-o.x)*k;p.y=o.y+(p.y-o.y)*k;};
-  if(it.type==='line'){sc(it.p1);sc(it.p2);}else if(it.type==='free')it.pts.forEach(sc);else if(it.type==='hl'){it.pts.forEach(sc);if(it.clip)it.clip.forEach(lp=>lp.forEach(sc));}else if(it.type==='rect'){sc(it.p);it.w*=k;it.h*=k;}
+  if(it.type==='line'){sc(it.p1);sc(it.p2);}else if(it.type==='free'||it.type==='poly')it.pts.forEach(sc);else if(it.type==='hl'){it.pts.forEach(sc);if(it.clip)it.clip.forEach(lp=>lp.forEach(sc));}else if(it.type==='rect'){sc(it.p);it.w*=k;it.h*=k;}
   else if(it.type==='circle'||it.type==='arc'){sc(it.c);it.r*=k;}else if(it.type==='tri'){sc(it.p1);it.side*=k;}else if(it.type==='leader'){sc(it.p1);sc(it.p2);}else if(it.type==='text')sc(it.p);else if(it.type==='dim'&&!it.ref&&it.pa){sc(it.pa);sc(it.pb);}}
 // Move the selected items into another frame (or out to the page scale), keeping real size by default
 function assignFrameDialog(ids){
@@ -1253,7 +1364,7 @@ function assignFrame(its,frameId,keepReal){
   sel=its.length===1?{kind:'item',id:its[0].id}:{kind:'multi',ids:its.map(i=>i.id)};showProps();render();}
 
 // ---------- detail (enlarged view of a region, copied + clipped into a new frame) ----------
-const FRAME_MODES=[['new','กรอบใหม่'],['detail','ขยายรายละเอียด']];const LINE_MODES=[['line','เส้นตรง'],['guide','เส้นช่วยจัดหน้า (snap ทุกกรอบ ไม่พิมพ์)']];let lineMode='line';let frameMode='new';let detailDraft=null; // {rect:{x,y,w,h},fid,scale,label,mark} waiting for a tap that places the new frame
+const FRAME_MODES=[['new','กรอบใหม่'],['detail','ขยายรายละเอียด']];const LINE_MODES=[['line','เส้นตรง'],['guide','เส้นช่วยจัดหน้า (snap ทุกกรอบ ไม่พิมพ์)']];let lineMode='line';const EXT_MODES=[['extend','ต่อไปชนเส้นถัดไป'],['join','รวมเส้น (แนวเดียวกัน / ปิดมุม / โค้งเดียวกัน)']];let extMode='extend';let joinFirst=null;let frameMode='new';let detailDraft=null; // {rect:{x,y,w,h},fid,scale,label,mark} waiting for a tap that places the new frame
 function inRect(p,R){return p.x>=R.x1-1e-9&&p.x<=R.x2+1e-9&&p.y>=R.y1-1e-9&&p.y<=R.y2+1e-9;}
 function clipSegRect(a,b,R){ // Liang–Barsky: part of segment a→b inside R, or null
   let t0=0,t1=1;const dx=b.x-a.x,dy=b.y-a.y;
@@ -1305,7 +1416,7 @@ function makeDetail(D,at){ // copy everything inside D.rect, cut at its edges, s
   for(const it of src){
     if(it.type==='dim')continue;
     if(whole(it)){const c=place(clone(it));idmap[it.id]=c.id;out.push(c);continue;}
-    if(it.type==='line'||it.type==='rect'||it.type==='tri'){for(const [a,b] of itemSegs(it)){const s=clipSegRect(a,b,Rc);if(s&&dist(s[0],s[1])>1e-6)out.push(place({id:uid(),type:'line',frame:null,sw:it.sw,color:it.color,ls:it.ls||'solid',p1:s[0],p2:s[1]}));}}
+    if(it.type==='line'||it.type==='rect'||it.type==='tri'||it.type==='poly'){for(const [a,b] of itemSegs(it)){const s=clipSegRect(a,b,Rc);if(s&&dist(s[0],s[1])>1e-6)out.push(place({id:uid(),type:'line',frame:null,sw:it.sw,color:it.color,ls:it.ls||'solid',p1:s[0],p2:s[1]}));}}
     else if(it.type==='circle'||it.type==='arc'){const arcs=clipRoundRect(it,Rc);if(arcs==='all')out.push(place(clone(it)));else for(const a of arcs)out.push(place(Object.assign(clone(it),{type:'arc',a0:a.a0,a1:a.a1})));}
     else if(it.type==='free'){for(const pc of clipPolyRect(it.pts,Rc))out.push(place(Object.assign(clone(it),{pts:pc})));}
     else if(it.type==='hl'){const Re={x1:Rc.x1-it.sw/2,y1:Rc.y1-it.sw/2,x2:Rc.x2+it.sw/2,y2:Rc.y2+it.sw/2};
@@ -1323,6 +1434,24 @@ function makeDetail(D,at){ // copy everything inside D.rect, cut at its edges, s
     const tx={id:uid(),type:'text',frame:D.fid,sw:0.35,color:'#111111',ls:'solid',p:{x:R.x+R.w+1,y:R.y-5.5},text:D.label,ts:3.5,b:true,i:false,u:false,box:true,mark:true};doc.items.push(mk,tx);}
   sel={kind:'frame',id:f.id};setTool('select');showProps();render();
   toast(out.length?'สร้างรายละเอียด '+D.label+' ('+fmtScale(D.scale)+') '+out.length+' ชิ้น'+(R.w*k+2*m>ps.w||R.h*k+2*m>ps.h?' — ใหญ่กว่ากระดาษ บางส่วนถูกตัด':''):'ไม่มีชิ้นงานในบริเวณที่เลือก');}
+
+// ---------- clipboard (copy here, paste on any page) ----------
+let clip=null; // {items:[...clones with _s = source scale], pageId}
+function copyToClip(ids){const set=new Set(ids);const its=doc.items.filter(i=>set.has(i.id)||(i.type==='dim'&&i.ref&&set.has(i.ref)));if(!its.length){toast('ไม่มีชิ้นที่เลือก');return;}
+  clip={pageId:curPage().id,items:its.map(i=>{const c=clone(i);c._s=scaleFor(i.frame);return c;})};try{localStorage.setItem('ss:clip',JSON.stringify(clip));}catch(e){}
+  toast('คัดลอก '+its.length+' ชิ้นแล้ว · ไปหน้าที่ต้องการแล้วกด ☰ → วาง (หรือ Ctrl+V)');}
+function pasteClip(){if(!clip||!clip.items.length){toast('ยังไม่มีอะไรให้วาง เลือกชิ้นงานแล้วกด "คัดลอกไว้วาง" ก่อน');return;}
+  commit();const idmap={};const its=clip.items.map(i=>{const c=clone(i);const s=c._s;delete c._s;idmap[i.id]=c.id=uid();c._s=s;return c;});
+  for(const c of its)if(c.type==='dim'&&c.ref)c.ref=idmap[c.ref]||null;
+  // group box → target frame at its centre on this page; keep real size when scales differ
+  let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;for(const it of its){if(it.type==='dim'&&it.ref)continue;const b=itemBBox(it);if(!isFinite(b.x1))continue;x1=Math.min(x1,b.x1);y1=Math.min(y1,b.y1);x2=Math.max(x2,b.x2);y2=Math.max(y2,b.y2);}
+  if(!isFinite(x1)){x1=y1=20;x2=y2=40;}
+  clip.pastes=clip.pastes||{};const pid=curPage().id;const n=(clip.pastes[pid]||0)+(clip.pageId===pid?1:0);clip.pastes[pid]=(clip.pastes[pid]||0)+1;const dx=6*n,dy=6*n; // each repeat on the same page steps down-right so copies do not stack
+  const f=frameAt({x:(x1+x2)/2+dx,y:(y1+y2)/2+dy});const fid=f?f.id:null;const o={x:x1,y:y1};
+  for(const it of its){const k=it._s/scaleFor(fid);delete it._s;if(it.type==='write'||it.type==='guide'){it.frame=null;}else{if(Math.abs(k-1)>1e-9&&!(it.type==='dim'&&it.ref))scaleItemGeom(it,k,o);it.frame=fid;}
+    if(dx||dy)moveItem(it,dx,dy,true);}
+  doc.items.push(...its);const ids=its.filter(i=>!(i.type==='dim'&&i.ref)).map(i=>i.id);sel=ids.length===1?{kind:'item',id:ids[0]}:{kind:'multi',ids};
+  setTool('select');showProps();render();toast('วาง '+its.length+' ชิ้น'+(f?' ในกรอบ '+(f.label||'')+' '+fmtScale(f.scale):' บนหน้า')+' · ลากย้ายได้เลย');}
 function changeScale(frameOrNull,newScale){ // asks whether to keep real-world size (rescale drawing on paper) or keep paper size
   const old=frameOrNull?frameOrNull.scale:doc.scale;if(old===newScale)return;const k=old/newScale;
   const items=doc.items.filter(i=>(i.frame||null)===(frameOrNull?frameOrNull.id:null)&&i.type!=='write'&&i.type!=='guide');
@@ -1377,11 +1506,24 @@ function exportJson(){saveNow();saveFile(safeName()+'.json',JSON.stringify(doc))
 
 // ---------- PDF (vector, true scale) ----------
 function exportPdf(){
+  if(doc.pages.length<=1)return exportPdfPages([0]);
+  // choose pages
+  overlay.hidden=false;overlay.innerHTML='';
+  const sh=el(`<div class="sheet"><h2>ส่งออก PDF — เลือกหน้า</h2><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="pAll">ทุกหน้า</button><button class="btn" id="pCur">เฉพาะหน้านี้</button><button class="btn" id="pNone">ไม่เลือก</button></div><div class="doclist" id="pList" style="max-height:50vh;overflow:auto"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="pCancel">ยกเลิก</button><button class="btn primary" id="pOk">ส่งออก</button></div></div>`);
+  const list=sh.querySelector('#pList');const boxes=[];
+  doc.pages.forEach((pg,i)=>{const n=pg.items.length,f=pg.frames.length;const r=el(`<label class="docrow" style="cursor:pointer;display:flex;gap:10px;align-items:center"><input type="checkbox" checked><div class="t"><b>หน้า ${i+1}${i===doc.cur?' (หน้าปัจจุบัน)':''}</b><span>${pg.paper} ${pg.orient==='landscape'?'แนวนอน':'แนวตั้ง'} · สเกล ${fmtScale(pg.scale)} · ${f} กรอบ · ${n} ชิ้น</span></div></label>`);boxes.push(r.querySelector('input'));list.append(r);});
+  const setAll=v=>boxes.forEach(b=>b.checked=v);
+  sh.querySelector('#pAll').onclick=()=>setAll(true);sh.querySelector('#pNone').onclick=()=>setAll(false);sh.querySelector('#pCur').onclick=()=>{setAll(false);boxes[doc.cur].checked=true;};
+  sh.querySelector('#pCancel').onclick=()=>{overlay.hidden=true;};
+  sh.querySelector('#pOk').onclick=()=>{const idx=boxes.map((b,i)=>b.checked?i:-1).filter(i=>i>=0);if(!idx.length){toast('เลือกอย่างน้อย 1 หน้า');return;}overlay.hidden=true;exportPdfPages(idx);};
+  overlay.append(sh);}
+function exportPdfPages(idx){
   const saveCur=doc.cur;const pagesOut=[];
-  for(let i=0;i<doc.pages.length;i++){doc.cur=i;pagesOut.push(renderPagePdf());}
+  for(const i of idx){doc.cur=i;pagesOut.push(renderPagePdf());}
   doc.cur=saveCur;
   const bytes=buildPdf(pagesOut);
-  saveFile(safeName()+'.pdf',new Blob([bytes],{type:'application/pdf'}));
+  const suffix=idx.length===doc.pages.length?'':(idx.length===1?'-p'+(idx[0]+1):'-'+idx.length+'pages');
+  saveFile(safeName()+suffix+'.pdf',new Blob([bytes],{type:'application/pdf'}));toast('ส่งออก PDF '+idx.length+' หน้า');
 }
 function renderPagePdf(){
   const ps=paperSize(doc),K=72/25.4,W=ps.w*K,H=ps.h*K;
@@ -1395,6 +1537,7 @@ function renderPagePdf(){
       arc(c.x+r,c.y+k,c.x+k,c.y+r,c.x,c.y+r);arc(c.x-k,c.y+r,c.x-r,c.y+k,c.x-r,c.y);arc(c.x-r,c.y-k,c.x-k,c.y-r,c.x,c.y-r);arc(c.x+k,c.y-r,c.x+r,c.y-k,c.x+r,c.y);s+='h ';}
     else if(it.type==='arc'){const sw=arcSweep(it),n=Math.ceil(sw/(Math.PI/2)),da=sw/n,c=it.c,r=it.r;const k=4/3*Math.tan(da/4);let a=it.a0;s+=`${X(c.x+r*Math.cos(a))} ${Y(c.y+r*Math.sin(a))} m `;
       for(let i=0;i<n;i++){const b=a+da;const p1={x:c.x+r*(Math.cos(a)-k*Math.sin(a)),y:c.y+r*(Math.sin(a)+k*Math.cos(a))},p2={x:c.x+r*(Math.cos(b)+k*Math.sin(b)),y:c.y+r*(Math.sin(b)-k*Math.cos(b))},p3={x:c.x+r*Math.cos(b),y:c.y+r*Math.sin(b)};s+=`${X(p1.x)} ${Y(p1.y)} ${X(p2.x)} ${Y(p2.y)} ${X(p3.x)} ${Y(p3.y)} c `;a=b;}}
+    else if(it.type==='poly'){it.pts.forEach((q,i)=>{s+=`${X(q.x)} ${Y(q.y)} ${i?'l':'m'} `;});if(it.closed)s+='h ';}
     else if(it.type==='free'||it.type==='write'||it.type==='hl'){const p=it.pts;if(p.length===1){s+=`${X(p[0].x)} ${Y(p[0].y)} m ${X(p[0].x)} ${Y(p[0].y)} l `;}else{s+=`${X(p[0].x)} ${Y(p[0].y)} m `;for(let i=1;i<p.length-1;i++){const m={x:(p[i].x+p[i+1].x)/2,y:(p[i].y+p[i+1].y)/2};const c1={x:p[i-1].x+2/3*(p[i].x-p[i-1].x),y:p[i-1].y+2/3*(p[i].y-p[i-1].y)},c2={x:m.x+2/3*(p[i].x-m.x),y:m.y+2/3*(p[i].y-m.y)};s+=`${X(c1.x)} ${Y(c1.y)} ${X(c2.x)} ${Y(c2.y)} ${X(m.x)} ${Y(m.y)} c `;
         // next segment starts from m; adjust p[i-1] reference by mutating a copy
         p[i]=m;}s+=`${X(p[p.length-1].x)} ${Y(p[p.length-1].y)} l `;}}
@@ -1506,7 +1649,7 @@ window.addEventListener('pointerdown',e=>{if(!e.target.closest('.pop,.menu,#bStr
 
 // ---------- boot ----------
 (async function boot(){
-  try{fingerDraw=localStorage.getItem('ss:finger')==='1';angleLock=localStorage.getItem('ss:angle')==='1';$('#bAngle').classList.toggle('on',angleLock);const dd=JSON.parse(localStorage.getItem('ss:dim')||'null');if(dd)dimDef=Object.assign(dimDef,dd);const od=parseFloat(localStorage.getItem('ss:offset'));if(od>0)offsetDef=od;const ls=localStorage.getItem('ss:ls');if(ls&&LSTYLES[ls])strokeLS=ls;const td=JSON.parse(localStorage.getItem('ss:text')||'null');if(td)textDef=Object.assign(textDef,td);const hh=JSON.parse(localStorage.getItem('ss:hl')||'null');if(hh){if(HL_WIDTHS.includes(hh.w))hlW=hh.w;if(HL_COLORS.includes(hh.c))hlC=hh.c;hlClip=!!hh.clip;hlFill=!!hh.fill;}const pd=JSON.parse(localStorage.getItem('ss:pat')||'null');if(pd)patDef=Object.assign(patDef,pd);const gg=JSON.parse(localStorage.getItem('ss:gest')||'null');if(gg)gest=Object.assign(gest,gg);}catch(e){}
+  try{fingerDraw=localStorage.getItem('ss:finger')==='1';angleLock=localStorage.getItem('ss:angle')==='1';$('#bAngle').classList.toggle('on',angleLock);const dd=JSON.parse(localStorage.getItem('ss:dim')||'null');if(dd)dimDef=Object.assign(dimDef,dd);const od=parseFloat(localStorage.getItem('ss:offset'));if(od>0)offsetDef=od;const ls=localStorage.getItem('ss:ls');if(ls&&LSTYLES[ls])strokeLS=ls;const td=JSON.parse(localStorage.getItem('ss:text')||'null');if(td)textDef=Object.assign(textDef,td);const hh=JSON.parse(localStorage.getItem('ss:hl')||'null');if(hh){if(HL_WIDTHS.includes(hh.w))hlW=hh.w;if(HL_COLORS.includes(hh.c))hlC=hh.c;hlClip=!!hh.clip;hlFill=!!hh.fill;}const pd=JSON.parse(localStorage.getItem('ss:pat')||'null');if(pd)patDef=Object.assign(patDef,pd);const gg=JSON.parse(localStorage.getItem('ss:gest')||'null');if(gg)gest=Object.assign(gest,gg);const cl=JSON.parse(localStorage.getItem('ss:clip')||'null');if(cl&&Array.isArray(cl.items))clip=cl;}catch(e){}
   $('#strokeIcon').innerHTML=lsIcon(strokeLS,22);$('#ver').textContent='v'+VERSION;try{const am=localStorage.getItem('ss:arc');if(am&&ARC_MODES.some(m=>m[0]===am))arcMode=am;}catch(e){}syncModeLbls();
   let last=null;try{last=localStorage.getItem('ss:last');}catch(e){}
   const docs=await dbAll();let d=docs.find(x=>x.id===last)||docs.sort((a,b)=>b.updated-a.updated)[0];
@@ -1524,7 +1667,7 @@ window.addEventListener('pointerdown',e=>{if(!e.target.closest('.pop,.menu,#bStr
   if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>render());
   $('#strokeLbl').textContent=strokeW;
 })();
-if(/[?&]debug/.test(location.search))window.__ss={doc:()=>doc,hitItem,dimTextHit,toPaper,sel:()=>sel,drag:()=>drag,dimGeom,dimTextPos,dimLinePieces,dimTerms,dimLeader,render:()=>render(),tool:()=>tool,draft:()=>detailDraft,drag:()=>drag,angleOn,angleLock:()=>angleLock,angleTemp:()=>angleTemp,view:()=>view,toScreen,itemOf,dimText,dimGeom};
+if(/[?&]debug/.test(location.search))window.__ss={doc:()=>doc,setMode,mode:()=>mode,setSel:v=>{sel=v;showProps();},joinChain,joinItems,joinSelected,copyToClip,pasteClip,gotoPage,clip:()=>clip,sel:()=>sel,hitItem,dimTextHit,toPaper,sel:()=>sel,drag:()=>drag,dimGeom,dimTextPos,dimLinePieces,dimTerms,dimLeader,render:()=>render(),tool:()=>tool,draft:()=>detailDraft,drag:()=>drag,angleOn,angleLock:()=>angleLock,angleTemp:()=>angleTemp,view:()=>view,toScreen,itemOf,dimText,dimGeom};
 function mk(type,frame,g,sw,color){const it={id:uid(),type,frame,color:color||'#111111',...g};it.sw=sw;return it;}
 })();
 </script>
