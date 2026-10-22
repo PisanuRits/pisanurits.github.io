@@ -161,7 +161,7 @@ input.num{width:96px;font-variant-numeric:tabular-nums;font-family:var(--mono)}
 (function(){
 'use strict';
 // ---------- constants ----------
-const VERSION='2.19.1';
+const VERSION='2.20.0';
 const PAPER={A4:[210,297],A3:[297,420]};
 const SCALES=[5,10,20,25,50,75,100,200];
 const WIDTHS=[0.18,0.25,0.35,0.5,0.7];
@@ -1243,11 +1243,62 @@ document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.
   else if((e.ctrlKey||e.metaKey)&&e.key==='c'&&sel&&sel.kind!=='frame'){e.preventDefault();copyToClip(selIds());}
   else if((e.ctrlKey||e.metaKey)&&e.key==='v'){e.preventDefault();pasteClip();}
   else if((e.key==='Delete'||e.key==='Backspace')&&sel){commit();if(sel.kind==='item'){doc.items=doc.items.filter(x=>x.id!==sel.id);purgeDims();}else if(sel.kind==='multi'){const ids=new Set(sel.ids);doc.items=doc.items.filter(x=>!ids.has(x.id));purgeDims();}else{doc.frames=doc.frames.filter(x=>x.id!==sel.id);doc.items=doc.items.filter(i=>i.frame!==sel.id);}sel=null;showProps();render();}
-  else if(e.key==='Escape'){if(joinFirst){joinFirst=null;$('#hint').textContent=HINTS[tool]||'';sel=null;showProps();render();}else if(detailDraft){detailDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(arcDraft){arcDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(mode)setMode(null);else{sel=null;showProps();hideMenus();render();}}
-  else{const k={v:'select',l:'line',p:'free',r:'rect',c:'circle',t:'tri',w:'write',f:'frame',e:'erase',d:'dim',n:'leader',x:'text',h:'hl',t:'trim',g:'extend',k:'arc',j:'pat'}[e.key];if(k)setTool(k);else if(e.key==='a'||e.key==='A')toggleAngle();else if(e.key==='c'&&sel&&sel.kind==='multi'){setMode({kind:'copy',srcs:sel.ids.slice()});}else if(e.key==='c'&&sel&&sel.kind==='item'){const it=itemOf(sel.id);if(it&&it.type!=='dim')setMode({kind:'copy',src:it.id});}else if(e.key==='m'&&sel&&sel.kind==='multi'){setMode({kind:'move',srcs:sel.ids.slice()});}else if(e.key==='m'&&sel&&sel.kind==='item'){setMode({kind:'move',src:sel.id});}else if(e.key==='o'&&sel&&sel.kind==='item'){const it=itemOf(sel.id);if(it&&['line','rect','tri','circle','arc'].includes(it.type))setMode({kind:'offset',src:it.id,dist:offsetDef});}}
+  else if(e.key==='Escape'){if(cmdBuf){cmdBuf='';showCmd();}else if(joinFirst){joinFirst=null;$('#hint').textContent=HINTS[tool]||'';sel=null;showProps();render();}else if(detailDraft){detailDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(arcDraft){arcDraft=null;$('#hint').textContent=HINTS[tool]||'';render();}else if(mode)setMode(null);else{sel=null;showProps();hideMenus();render();}}
+  else if(e.key==='F8'){e.preventDefault();toggleAngle();}
+  else if((e.ctrlKey||e.metaKey)&&e.key==='a'){e.preventDefault();const ids=doc.items.filter(i=>!(i.type==='dim'&&i.ref)).map(i=>i.id);if(ids.length){sel=ids.length===1?{kind:'item',id:ids[0]}:{kind:'multi',ids};showProps();render();}}
+  else if(e.key==='Enter'||e.key===' '){e.preventDefault();if(cmdBuf)runCmd(cmdBuf);else if(lastCmd)runCmd(lastCmd);}
+  else if(e.key==='Backspace'){cmdBuf=cmdBuf.slice(0,-1);showCmd();}
+  else if(e.key==='?'||e.key==='F1'){e.preventDefault();cmdHelp();}
+  else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&/^[a-zA-Z0-9]$/.test(e.key)){cmdBuf+=e.key.toUpperCase();showCmd();}
 });
 
 // ---------- tools UI ----------
+// ---------- AutoCAD-style command aliases (type letters, Enter/Space to run; Enter alone repeats; Esc clears) ----------
+let cmdBuf='',lastCmd='';
+const CMDS=[ // [aliases, label, action]
+  ['L,LINE','เส้นตรง',()=>{lineMode='line';syncModeLbls();setTool('line');}],
+  ['XL,XLINE,GUIDE','เส้นช่วยจัดหน้า',()=>{lineMode='guide';syncModeLbls();setTool('guide');}],
+  ['PL,SKETCH,FREE','วาดอิสระ',()=>setTool('free')],
+  ['REC,RECT,RECTANG','สี่เหลี่ยม',()=>setTool('rect')],
+  ['C,CIRCLE','วงกลม',()=>setTool('circle')],
+  ['A,ARC','ส่วนโค้ง',()=>setTool('arc')],
+  ['POL,TRI,POLYGON','สามเหลี่ยมด้านเท่า',()=>setTool('tri')],
+  ['LE,MLD,LEADER','ลูกศรชี้',()=>setTool('leader')],
+  ['T,MT,TEXT','ข้อความ',()=>setTool('text')],
+  ['WR,WRITE','เขียนลายมือ',()=>setTool('write')],
+  ['DIM,DAL,DIMALIGNED','บอกระยะตามเส้น',()=>{dimDef.orient='aligned';markDirty();syncModeLbls();setTool('dim');}],
+  ['DLI,DIMLINEAR','บอกระยะตามแกน',()=>{dimDef.orient='axis';markDirty();syncModeLbls();setTool('dim');}],
+  ['DH','บอกระยะแนวนอน',()=>{dimDef.orient='h';markDirty();syncModeLbls();setTool('dim');}],
+  ['DV','บอกระยะแนวตั้ง',()=>{dimDef.orient='v';markDirty();syncModeLbls();setTool('dim');}],
+  ['H,BH,HATCH','ปากกาลาย (hatch)',()=>setTool('pat')],
+  ['HI,HL','ปากกาเน้น',()=>setTool('hl')],
+  ['E,ERASE,DEL','ยางลบ (หรือลบชิ้นที่เลือก)',()=>{if(sel&&sel.kind!=='frame'){commit();const ids=new Set(selIds());doc.items=doc.items.filter(x=>!ids.has(x.id));purgeDims();sel=null;showProps();render();}else setTool('erase');}],
+  ['TR,TRIM','ตัด',()=>setTool('trim')],
+  ['EX,EXTEND','ต่อไปชน',()=>{extMode='extend';syncModeLbls();setTool('extend');}],
+  ['J,JOIN','รวมเส้น',()=>{extMode='join';syncModeLbls();setTool('join');}],
+  ['X,EXPLODE','แยกเป็นเส้น (ชิ้นที่เลือก)',()=>{const its=selIds().map(itemOf).filter(i=>i&&['rect','tri','poly'].includes(i.type));if(!its.length)return toast('เลือกสี่เหลี่ยม/สามเหลี่ยม/รูปหลายเหลี่ยมก่อน');for(const it of its)explodeItem(it);}],
+  ['M,MOVE','ย้าย (ชิ้นที่เลือก)',()=>{const ids=selIds();if(!ids.length)return toast('เลือกชิ้นงานก่อน');setMode({kind:'move',srcs:ids});}],
+  ['CO,CP,COPY','คัดลอก (ชิ้นที่เลือก)',()=>{const ids=selIds();if(!ids.length)return toast('เลือกชิ้นงานก่อน');setMode({kind:'copy',srcs:ids});}],
+  ['O,OFFSET','ออฟเซ็ต (ชิ้นที่เลือก)',()=>{const it=sel&&sel.kind==='item'?itemOf(sel.id):null;if(!it||!['line','rect','tri','circle','arc'].includes(it.type))return toast('เลือกเส้นตรง/สี่เหลี่ยม/สามเหลี่ยม/วงกลม/โค้ง 1 ชิ้นก่อน');setMode({kind:'offset',src:it.id,dist:offsetDef});}],
+  ['FR,FRAME,MV,VIEWPORT','กรอบใหม่',()=>{frameMode='new';syncModeLbls();setTool('frame');}],
+  ['DE,DETAIL,VIEWDETAIL','ขยายรายละเอียด',()=>{frameMode='detail';syncModeLbls();setTool('detail');}],
+  ['S,SEL,SELECT,V','เลือก',()=>setTool('select')],
+  ['OR,ORTHO,F8','ล็อกมุม 15° (เปิด/ปิด)',()=>toggleAngle()],
+  ['U,UNDO','ย้อนกลับ',()=>undo()],
+  ['REDO','ทำซ้ำ',()=>redo()],
+  ['ZE,ZOOM','ซูมพอดีหน้า',()=>{fitView();render();}],
+  ['PA,PASTE','วาง (คลิปบอร์ด)',()=>pasteClip()],
+  ['CB,COPYCLIP','คัดลอกไว้วาง',()=>{const ids=selIds();if(!ids.length)return toast('เลือกชิ้นงานก่อน');copyToClip(ids);}],
+  ['PLOT,PRINT,PDF','ส่งออก PDF',()=>exportPdf()],
+  ['SAVE,QSAVE','บันทึกเดี๋ยวนี้',()=>{saveNow();toast('บันทึกแล้ว (แอปบันทึกอัตโนมัติอยู่แล้ว)');}],
+  ['PG,PAGE','หน้าถัดไป',()=>gotoPage(doc.cur+1)],
+  ['HELP,?','รายการคำสั่ง',()=>cmdHelp()]];
+function findCmd(w){w=w.toUpperCase();return CMDS.find(c=>c[0].split(',').includes(w));}
+function showCmd(){$('#hint').textContent=cmdBuf?'คำสั่ง: '+cmdBuf+'_   (Enter = ทำ · Esc = ยกเลิก · ? = รายการคำสั่ง)':(mode?modeHint():(HINTS[tool]||''));}
+function runCmd(w){const c=findCmd(w);cmdBuf='';if(!c){toast('ไม่รู้จักคำสั่ง '+w+' · กด ? ดูรายการ');showCmd();return;}lastCmd=w.toUpperCase();c[2]();showCmd();toast(c[1]);}
+function cmdHelp(){overlay.hidden=false;overlay.innerHTML='';const rows=CMDS.map(c=>`<tr><td style="white-space:nowrap;padding:3px 10px 3px 0"><b>${c[0].split(',').join(' / ')}</b></td><td style="padding:3px 0">${c[1]}</td></tr>`).join('');
+  const sh=el(`<div class="sheet" style="max-width:640px"><h2>คีย์ลัดแบบ AutoCAD</h2><p class="lbl" style="margin:0">พิมพ์ตัวย่อแล้วกด <b>Enter</b> หรือ <b>Space</b> · Enter เปล่า = ทำคำสั่งล่าสุดซ้ำ · Esc = ยกเลิก/ล้าง · Delete = ลบที่เลือก · F8 = ล็อกมุม · Ctrl+Z/Y · Ctrl+C/V = คัดลอกไว้วาง/วาง · Ctrl+A = เลือกทั้งหมด</p><div style="max-height:55vh;overflow:auto"><table style="border-collapse:collapse;font-size:14px">${rows}</table></div><div style="display:flex;justify-content:flex-end"><button class="btn primary" id="hOk">ปิด</button></div></div>`);
+  sh.querySelector('#hOk').onclick=()=>{overlay.hidden=true;};overlay.append(sh);}
 const HINTS={select:'แตะเพื่อเลือก · ลากที่ว่างเพื่อเลือกหลายชิ้น · ลากชิ้นเพื่อย้าย',line:'ลากเส้นตรง · snap ปลาย/กึ่งกลางเส้นในกรอบเดียวกัน',free:'วาดอิสระ · ปลายเส้น snap ได้',rect:'ลากจากมุมถึงมุม',circle:'ลากจากจุดศูนย์กลางออกไป',tri:'ลากด้านแรกของสามเหลี่ยมด้านเท่า',write:'เขียนตัวหนังสือด้วยลายมือ · ไม่ขึ้นกับสเกล',frame:'ลากตีกรอบ แล้วตั้งสเกลของกรอบ · ลากมุมเพื่อขยาย',erase:'แตะหรือลากผ่านเส้นเพื่อลบทั้งเส้น · ท่าทางนิ้วตั้งได้ที่เมนู ☰',dim:'แตะเส้น/รูปทรง = บอกระยะอัตโนมัติ · ลากจากจุดถึงจุด = บอกระยะอิสระ · เลือกแล้วลากปลายเพื่อย้ายจุดวัด · จิ้มตัวเลข 2 ครั้งเพื่อย้ายตัวเลข',leader:'ลากจากจุดที่ชี้ (หัว) ไปยังที่วางข้อความ (หาง) แล้วพิมพ์',hl:'ปากกาเน้น โปร่งแสง · ตั้งความกว้าง สี และ "ไม่ทะลุเส้น" ที่ปุ่มด้านล่าง',pat:'ปากกาลาย: ระบายลวดลายวัสดุ · ตั้งลาย ระยะ มุม สี ที่ปุ่มความหนา/สี',arc:'ส่วนโค้ง: แตะจุดเริ่ม แตะจุดจบ แล้วลากกำหนดความโค้ง (เปลี่ยนวิธีที่ปุ่ม)',trim:'ตัด: แตะช่วงของเส้นตรงที่ต้องการให้หายไป (ตัดถึงเส้นที่ตัดผ่านซ้าย/ขวา)',extend:'ต่อ: แตะเส้นตรงใกล้ปลายที่ต้องการยืด ไปชนเส้นถัดไปในแนวเดียวกัน',text:'แตะตำแหน่งที่ต้องการ แล้วพิมพ์ข้อความ',detail:'ขยายรายละเอียด: ลากกรอบครอบบริเวณที่ต้องการขยาย แล้วเลือกสเกล',guide:'เส้นช่วยจัดหน้า: ลากเหมือนเส้นตรง · snap ได้ทุกกรอบ ทุกสเกล รวมมุมกรอบ · ไม่พิมพ์ลง PDF',join:'รวมเส้น: แตะเส้นที่ 1 แล้วแตะเส้นที่ 2 · ปลายชนกัน = ต่อเป็นรูปเดียว · แนวเดียวกัน = รวมเป็นเส้นเดียว · ต่างแนวไม่ชน = ปิดมุม · หรือลากกรอบเลือกทั้งรูปแล้วกด "รวมเป็นรูปเดียว"'};
 function setTool(t){tool=t;if(mode){mode=null;}arcDraft=null;detailDraft=null;joinFirst=null;if(typeof syncHlBtns==='function')syncHlBtns();document.querySelectorAll('.tool[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t||(t==='detail'&&b.dataset.tool==='frame')||(t==='guide'&&b.dataset.tool==='line')||(t==='join'&&b.dataset.tool==='extend')));$('#hint').textContent=HINTS[t]||'';cv.style.cursor=t==='select'?'default':'crosshair';if(t!=='select'&&sel&&sel.kind==='frame'){sel=null;showProps();render();}}
 document.querySelectorAll('.tool[data-tool]').forEach(b=>b.addEventListener('click',()=>{hideMenus();const t=b.dataset.tool;
@@ -1292,6 +1343,7 @@ $('#bMenu').addEventListener('click',()=>{const n=el(`<div class="menu pop">
   <button class="btn" data-a="import">⬆ นำเข้าไฟล์สำรอง</button>
   <button class="btn" data-a="pdf">🖨 ส่งออก PDF ตามสเกล</button>
   <button class="btn" data-a="gest">☝ ท่าทางนิ้ว (แตะสองครั้ง/สามครั้ง/สองนิ้ว)</button>
+  <button class="btn" data-a="keys">⌨ คีย์ลัดแบบ AutoCAD</button>
   <button class="btn" data-a="paste" id="mPaste">📋 วาง</button>
   <button class="btn" data-a="pgdup">⧉ ทำสำเนาหน้านี้</button>
   <button class="btn" data-a="pgdel">✕ ลบหน้านี้</button>
@@ -1299,6 +1351,7 @@ $('#bMenu').addEventListener('click',()=>{const n=el(`<div class="menu pop">
   n.addEventListener('click',e=>{const a=e.target.closest('[data-a]');if(!a)return;hideMenus();menuAction(a.dataset.a);});$('#stage').append(n);});
 async function menuAction(a){
   if(a==='paste')return pasteClip();
+  if(a==='keys')return cmdHelp();
   if(a==='install'){if(!installEvt)return;installEvt.prompt();const r=await installEvt.userChoice;if(r&&r.outcome==='accepted'){installEvt=null;toast('ติดตั้งแล้ว เปิดได้จากหน้าจอหลัก');}return;}
   if(a==='home')return showHome();
   if(a==='new'){await saveNow();openDoc(newDoc());return;}
