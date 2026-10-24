@@ -161,7 +161,7 @@ input.num{width:96px;font-variant-numeric:tabular-nums;font-family:var(--mono)}
 (function(){
 'use strict';
 // ---------- constants ----------
-const VERSION='2.20.0';
+const VERSION='2.23.0';
 const PAPER={A4:[210,297],A3:[297,420]};
 const SCALES=[5,10,20,25,50,75,100,200];
 const WIDTHS=[0.18,0.25,0.35,0.5,0.7];
@@ -435,7 +435,7 @@ function itemAngle(it){if(it.type==='line')return angDeg(it.p1,it.p2);if(it.type
 function selIds(){if(!sel)return [];if(sel.kind==='item')return [sel.id];if(sel.kind==='multi')return sel.ids;return [];}
 function isSel(it){return sel&&((sel.kind==='item'&&sel.id===it.id)||(sel.kind==='multi'&&sel.ids.includes(it.id)));}
 function setMode(m){mode=m;showProps();if(m){$('#hint').textContent=modeHint();}else $('#hint').textContent=HINTS[tool]||'';render();}
-function modeHint(){if(!mode)return '';if(mode.kind==='offset')return 'ออฟเซ็ต: แตะด้านที่ต้องการให้เส้นใหม่ไปอยู่ (ทำซ้ำได้)';const nm=mode.kind==='move'?'ย้าย':'คัดลอก';
+function modeHint(){if(!mode)return '';if(mode.kind==='rotate')return !mode.pivot?'หมุน: แตะจุดหมุน (□ ปลาย/มุม · △ กึ่งกลาง · ○ ศูนย์กลาง หรือแตะที่ใดก็ได้)':!mode.ref?'หมุน: แตะจุดอ้างอิงแล้วลากไปยังมุมที่ต้องการ (ล็อกมุม 15° ได้)':'หมุน: ลากหรือแตะไปยังตำแหน่งใหม่ของจุดอ้างอิง';if(mode.kind==='mirror')return 'สะท้อน: แตะเส้นตรง (หรือเส้นช่วย) ที่จะใช้เป็นแกนสะท้อน · Esc ยกเลิก';if(mode.kind==='offset')return 'ออฟเซ็ต: แตะด้านที่ต้องการให้เส้นใหม่ไปอยู่ (ทำซ้ำได้)';const nm=mode.kind==='move'?'ย้าย':'คัดลอก';
   return mode.base?nm+': แตะหรือลากไปยังจุดปลายทาง (snap ได้ · ล็อกมุมได้)'+(mode.kind==='copy'?' · วางซ้ำได้ · กด "เสร็จ" เมื่อพอ':''):nm+': แตะจุดอ้างอิงบนชิ้นที่เลือก (□ ปลาย/มุม · △ กึ่งกลาง · ○ ศูนย์กลาง) หรือแตะที่ใดก็ได้';}
 // snap markers of the selected items, shown while a base point is being chosen
 function snapMarkers(it){const out=[];const E=p=>out.push({p,k:'end'}),M=p=>out.push({p,k:'mid'}),C=p=>out.push({p,k:'cen'});
@@ -464,7 +464,9 @@ function placeMode(dx,dy){ // apply the move / drop a copy
   if(mode.kind==='move'){for(const it of srcs)if(it.type!=='dim'||!it.ref)moveItem(it,dx,dy,true);
     // free dims attached by ref to a moved item follow automatically; dims attached to items outside the set stay
     setMode(null);toast('ย้ายแล้ว');return;}
-  const made=[];for(const src of srcs){const t=clone(src);t.id=uid();if(t.type!=='dim'||!t.ref)moveItem(t,dx,dy,true);doc.items.push(t);made.push(t);for(const dm of dimsOf(src.id)){const c=clone(dm);c.id=uid();c.ref=t.id;doc.items.push(c);}}
+  const made=[];const ex=new Set(srcs.map(i=>i.id));for(const src of srcs){const t=clone(src);t.id=uid();if(t.type!=='dim'||!t.ref)moveItem(t,dx,dy,true);doc.items.push(t);made.push(t);for(const dm of dimsOf(src.id)){if(ex.has(dm.id))continue;const c=clone(dm);c.id=uid();c.ref=t.id;doc.items.push(c);made.push(c);}}
+  // dims that were part of the selection keep their link to the copied object
+  const idmap={};srcs.forEach((s0,i)=>{idmap[s0.id]=made[i]&&made[i].id;});for(const t of made)if(t.type==='dim'&&t.ref&&idmap[t.ref])t.ref=idmap[t.ref];regroup(made);
   toast(made.length>1?'วางสำเนา '+made.length+' ชิ้น · วางต่อได้':'วางสำเนาแล้ว · วางต่อได้');render();}
 // dimension items that reference a given item
 function dimsOf(id){return doc.items.filter(i=>i.type==='dim'&&i.ref===id);}
@@ -592,7 +594,7 @@ function joinSelected(ids){ // merge every collinear pair among the selected lin
       if(!n)commit();a.p1={...pts[0].q};a.p2={...pts[pts.length-1].q};for(const dm of dimsOf(b.id)){dm.ref=a.id;dm.seg=undefined;}doc.items=doc.items.filter(i=>i.id!==b.id);lines.splice(j,1);n++;changed=true;break;}}}
   if(!n){toast('ไม่มีเส้นแนวเดียวกันที่ติดกันในชุดที่เลือก');return;}const left=lines.map(l=>l.id);sel=left.length===1?{kind:'item',id:left[0]}:{kind:'multi',ids:left};showProps();render();toast('รวมแล้ว '+n+' คู่');}
 function explodeItem(it){ // rect / tri / poly -> straight lines; attached dimensions follow their edge
-  if(it.type!=='rect'&&it.type!=='tri'&&it.type!=='poly')return;commit();const segs=itemSegs(it);const lines=segs.map(([p,q])=>({id:uid(),type:'line',frame:it.frame,sw:it.sw,color:it.color,ls:it.ls||'solid',p1:{...p},p2:{...q}}));
+  if(it.type!=='rect'&&it.type!=='tri'&&it.type!=='poly')return;commit();const segs=itemSegs(it);const lines=segs.map(([p,q])=>({id:uid(),type:'line',frame:it.frame,sw:it.sw,color:it.color,ls:it.ls||'solid',p1:{...p},p2:{...q},...(it.g?{g:it.g}:{})}));
   for(const dm of dimsOf(it.id)){if(dm.kind==='lin'&&lines[dm.seg]){dm.ref=lines[dm.seg].id;dm.seg=undefined;}}
   const idx=doc.items.indexOf(it);doc.items.splice(idx,1,...lines);purgeDims();sel={kind:'multi',ids:lines.map(l=>l.id)};showProps();render();toast('แยกเป็น '+lines.length+' เส้นแล้ว');}
 
@@ -704,9 +706,10 @@ function render(){
     ctx.restore();
   }
   // base-point markers for move / copy
-  if(mode&&(mode.kind==='copy'||mode.kind==='move')){ctx.save();ctx.lineWidth=2;ctx.strokeStyle=C('--snap');ctx.fillStyle=C('--paper');
-    if(!mode.base){for(const it of modeSrcs())for(const m of snapMarkers(it)){const s=toScreen(m.p);ctx.beginPath();if(m.k==='end')ctx.rect(s.x-6,s.y-6,12,12);else if(m.k==='mid'){ctx.moveTo(s.x,s.y-7);ctx.lineTo(s.x+7,s.y+6);ctx.lineTo(s.x-7,s.y+6);ctx.closePath();}else ctx.arc(s.x,s.y,7,0,7);ctx.fill();ctx.stroke();}}
-    else{const s=toScreen(mode.base);ctx.strokeStyle=C('--sel');ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(s.x,s.y,8,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(s.x-11,s.y);ctx.lineTo(s.x+11,s.y);ctx.moveTo(s.x,s.y-11);ctx.lineTo(s.x,s.y+11);ctx.stroke();}
+  if(mode&&(mode.kind==='copy'||mode.kind==='move'||mode.kind==='rotate')){ctx.save();ctx.lineWidth=2;ctx.strokeStyle=C('--snap');ctx.fillStyle=C('--paper');const base=mode.kind==='rotate'?mode.pivot:mode.base;
+    if(mode.kind==='rotate'&&mode.pivot){const s=toScreen(mode.pivot);ctx.strokeStyle=C('--sel');ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(s.x,s.y,8,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(s.x-11,s.y);ctx.lineTo(s.x+11,s.y);ctx.moveTo(s.x,s.y-11);ctx.lineTo(s.x,s.y+11);ctx.stroke();if(mode.ref){const r=toScreen(mode.ref);ctx.setLineDash([4,3]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(r.x,r.y);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=C('--sel');ctx.beginPath();ctx.arc(r.x,r.y,5,0,7);ctx.fill();if(drag&&drag.tool==='rot'&&drag.labelAt){const q=toScreen(drag.labelAt);ctx.strokeStyle=C('--sel');ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(q.x,q.y);ctx.stroke();}}}
+    else if(!base){for(const it of modeSrcs())for(const m of snapMarkers(it)){const s=toScreen(m.p);ctx.beginPath();if(m.k==='end')ctx.rect(s.x-6,s.y-6,12,12);else if(m.k==='mid'){ctx.moveTo(s.x,s.y-7);ctx.lineTo(s.x+7,s.y+6);ctx.lineTo(s.x-7,s.y+6);ctx.closePath();}else ctx.arc(s.x,s.y,7,0,7);ctx.fill();ctx.stroke();}}
+    else{const s=toScreen(base);ctx.strokeStyle=C('--sel');ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(s.x,s.y,8,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(s.x-11,s.y);ctx.lineTo(s.x+11,s.y);ctx.moveTo(s.x,s.y-11);ctx.lineTo(s.x,s.y+11);ctx.stroke();}
     ctx.restore();}
   // temp item while drawing
   if(drag&&drag.temp){for(const t of (drag.temps||[drag.temp])){ctx.save();const f=t.frame?frameOf(t.frame):null;if(f){const a=toScreen({x:f.x,y:f.y});ctx.beginPath();ctx.rect(a.x,a.y,f.w*view.zoom,f.h*view.zoom);ctx.clip();}drawItem(ctx,t,null);ctx.restore();}}
@@ -877,7 +880,7 @@ let gestureMoved=false;
 const TOOL_NAMES={join:'รวมเส้น',guide:'เส้นช่วย',detail:'ขยายรายละเอียด',select:'เลือก',line:'เส้นตรง',free:'วาดอิสระ',rect:'สี่เหลี่ยม',circle:'วงกลม',tri:'สามเหลี่ยม',write:'เขียน',hl:'ปากกาเน้น',pat:'ปากกาลาย',frame:'กรอบ',leader:'ลูกศร',text:'ข้อความ',dim:'บอกระยะ',erase:'ยางลบ',trim:'ตัด',extend:'ต่อ',arc:'ส่วนโค้ง'};
 let penTap=null;
 const WIG_AMP=15,WIG_N=3,WIG_MS=600; // pen wiggle while dragging: 3 direction reversals, each leg >= 15 px, within 0.6 s -> toggle angle lock (permanent)
-function lockableDrag(){if(!drag)return false;const t=drag.tool;if(t==='line'||t==='guide'||t==='tri'||t==='leader'||t==='copy')return true;if(t==='dim')return drag.mode==='free';if(t==='select')return drag.mode==='handle'||drag.mode==='move'||drag.mode==='moveMulti';return false;}
+function lockableDrag(){if(!drag)return false;const t=drag.tool;if(t==='line'||t==='guide'||t==='tri'||t==='leader'||t==='copy'||t==='place'||t==='rot')return true;if(t==='dim')return drag.mode==='free';if(t==='select')return drag.mode==='handle'||drag.mode==='move'||drag.mode==='moveMulti';return false;}
 function wiggle(s){if(!lockableDrag())return;const w=drag.wg||(drag.wg={last:s,dir:null,acc:0,revs:[]});const d={x:s.x-w.last.x,y:s.y-w.last.y};const L=Math.hypot(d.x,d.y);if(L<1)return;w.last=s;const now=performance.now();
   if(w.dir&&w.dir.x*d.x+w.dir.y*d.y<0){ // reversed
     if(w.acc>=WIG_AMP){w.revs=w.revs.filter(t=>now-t<WIG_MS);w.revs.push(now);if(w.revs.length>=WIG_N){w.revs=[];w.acc=0;w.dir=null;toggleAngle();toast((angleLock?'ล็อกมุม':'ปลดล็อกมุม')+' (สะบัดปากกา)');return;}}
@@ -945,6 +948,10 @@ function beginTool(p,pid){
       else{const a=snapped(p,fid);drag={pid,tool,mode:'free',frame:fid,start:a,temp:{id:uid(),type:'dim',frame:fid,ref:null,kind:'lin',pa:a,pb:a,off:7,color:'#111111',sw:0.18,unit:dimDef.unit,ts:dimDef.ts,lines:dimDef.lines,orient:dimDef.orient||'aligned',...dimStyleDef()}};}break;}
     case 'select':
       if(mode){const srcs=(mode.srcs||[mode.src]).map(itemOf).filter(Boolean);const src=srcs[0];if(!src){setMode(null);beginSelect(p,pid);break;}
+        if(mode.kind==='rotate'){if(!mode.pivot){mode.pivot=pickBase(p);$('#hint').textContent=modeHint();showProps();drag={pid,tool:'rot',fresh:true};render();break;}
+          if(!mode.ref){const s0=findSnap(p,'*');mode.ref=s0?{x:s0.x,y:s0.y}:p;$('#hint').textContent=modeHint();showProps();drag={pid,tool:'rot',fresh:true,start:p,temps:null};render();break;}
+          drag={pid,tool:'rot',fresh:false,start:p,temps:null};rotateGhost(drag,p);break;}
+        if(mode.kind==='mirror'){drag={pid,tool:'select',mode:'none'};const ax=hitItem(p,['line','guide']);if(!ax){toast('แตะที่เส้นตรงที่จะใช้เป็นแกนสะท้อน');break;}mirrorItems(mode.srcs||[mode.src],ax,!!mode.del);break;}
         if(mode.kind==='copy'||mode.kind==='move'){if(!mode.base){mode.base=pickBase(p);$('#hint').textContent=modeHint();showProps();drag={pid,tool:'place',start:p,fresh:true,temps:null};render();break;}
           drag={pid,tool:'place',start:p,fresh:false,temps:null};placeGhost(p);break;}
         if(mode.kind==='offset'){const fld=$('#offDist');if(fld){const v=parseReal(fld.value);if(v>0)mode.dist=v;}const d=mode.dist/scaleFor(src.frame);const o=offsetItem(src,d,p);if(o){commit();doc.items.push(o);sel={kind:'item',id:o.id};mode.src=o.id;showProps();}else toast('ออฟเซ็ตเข้าด้านในไม่ได้ ระยะใหญ่กว่ารูป');drag={pid,tool:'select',mode:'none'};break;}}
@@ -968,6 +975,7 @@ function moveTool(p){
     case 'trim':case 'extend':case 'join':break;
     case 'dim':{if(drag.mode!=='free')break;const t=drag.temp;const b=endPoint(t.pa,p,drag.frame,null,true);t.pb=b;if((dimDef.orient||'aligned')==='axis')t.orient=Math.abs(b.x-t.pa.x)>=Math.abs(b.y-t.pa.y)?'h':'v';drag.label=fmtLen(dist(t.pa,t.pb),drag.frame);drag.labelAt=b;break;}
     case 'place':{if(drag.fresh){if(dist(p,drag.start)*view.zoom>6)drag.fresh=false;else break;}placeGhost(p);break;}
+    case 'rot':{if(!mode||!mode.ref)break;if(drag.fresh){if(dist(p,drag.start)*view.zoom>6)drag.fresh=false;else break;}rotateGhost(drag,p);break;}
     case 'select':moveSelect(p);break;
   }
 }
@@ -989,6 +997,7 @@ function endTool(p){
     case 'detail':{if(d.mode==='marquee'){const r=d.rect;if(r&&r.x2-r.x1>3&&r.y2-r.y1>3)detailDialog(r,d.fid);else toast('ลากกรอบครอบบริเวณที่ต้องการขยาย');}break;}
     case 'trim':case 'extend':case 'join':break;
     case 'dim':if(d.mode==='free'&&dist(d.temp.pa,d.temp.pb)*view.zoom>6){commit();doc.items.push(d.temp);sel={kind:'item',id:d.temp.id};setTool('select');showProps();}else if(d.mode==='free')toast('ลากจากจุดแรกไปจุดที่สอง หรือแตะที่เส้นเพื่อบอกระยะอัตโนมัติ');break;
+    case 'rot':{if(d.fresh||!mode||!mode.ref){snapMark=null;break;}if(!d.temps)rotateGhost(d,p);if(d.temps)applyRotate(d.ang);snapMark=null;break;}
     case 'place':{if(d.fresh){snapMark=null;break;} // the tap that picked the base point
       if(!d.temps)placeGhostFor(d,p);if(d.temps){placeMode(d.dx,d.dy);}snapMark=null;break;}
     case 'select':endSelect(d,p);break;
@@ -997,7 +1006,7 @@ function endTool(p){
 function purgeDims(){doc.items=doc.items.filter(i=>i.type!=='dim'||!i.ref||itemOf(i.ref));}
 function eraseAt(p){
   const tol=8/view.zoom;
-  for(let i=doc.items.length-1;i>=0;i--){const it=doc.items[i];let hit=itemDist(p,it)<tol+it.sw/2;if(!hit&&it.type==='hl'&&it.fillAll&&it.clip){let inside=false;for(const lp of it.clip)if(ptInPoly(p,lp))inside=!inside;hit=inside;}if(hit){if(!drag.erased){commit();drag.erased=true;}doc.items.splice(i,1);purgeDims();if(isSel(it)){sel=sel.kind==='multi'?{kind:'multi',ids:sel.ids.filter(x=>x!==it.id)}:null;showProps();}}}
+  for(let i=doc.items.length-1;i>=0;i--){const it=doc.items[i];let hit=itemDist(p,it)<tol+it.sw/2;if(!hit&&it.type==='hl'&&it.fillAll&&it.clip){let inside=false;for(const lp of it.clip)if(ptInPoly(p,lp))inside=!inside;hit=inside;}if(hit){if(!drag.erased){commit();drag.erased=true;}if(it.g){const g=it.g;doc.items=doc.items.filter(x=>x.g!==g);i=doc.items.length;}else doc.items.splice(i,1);purgeDims();if(isSel(it)){sel=sel.kind==='multi'?{kind:'multi',ids:sel.ids.filter(x=>x!==it.id)}:null;showProps();}}}
 }
 // select tool
 function hitItem(p,dimOnly){const tol=8/view.zoom;let best=null,bd=Infinity,alt=null,ad=Infinity;const allow=Array.isArray(dimOnly)?dimOnly:['line','rect','tri','circle','arc','poly'];for(const it of doc.items){if(dimOnly&&!allow.includes(it.type))continue;const f=it.frame?frameOf(it.frame):null;if(f&&!(p.x>=f.x&&p.x<=f.x+f.w&&p.y>=f.y&&p.y<=f.y+f.h))continue;let d=itemDist(p,it)-it.sw/2;if(it.type==='hl'&&it.fillAll&&it.clip){let inside=false;for(const lp of it.clip)if(ptInPoly(p,lp))inside=!inside;if(inside)d=0;}if(it.type==='text'){const r=textRect(it);if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h)d=0;}else if(it.type==='leader'){const t=leaderGeom(it).text;if(t.w>0&&p.x>=t.x&&p.x<=t.x+t.w&&p.y>=t.y&&p.y<=t.y+t.h)d=0;}
@@ -1045,6 +1054,7 @@ function beginSelect(p,pid){
   if(h){const f=frameOf(sel.id);drag={pid,tool:'select',mode:'resize',handle:h,f,orig:{...f},start:p,moved:false};return;}
   const it=hitItem(p);
   if(it&&sel&&sel.kind==='multi'&&sel.ids.includes(it.id)){const its=sel.ids.map(itemOf).filter(Boolean);drag={pid,tool:'select',mode:'moveMulti',its,origs:its.map(clone),start:p,moved:false};return;}
+  if(it&&it.g){const was=sel&&sel.kind==='multi'&&sel.g===it.g;sel=selFromIds([it.id]);showProps();const its=sel.kind==='multi'?sel.ids.map(itemOf).filter(Boolean):[it];drag={pid,tool:'select',mode:'moveMulti',its,origs:its.map(clone),start:p,moved:false};arm(drag,was);return;}
   if(it){const was=sel&&sel.kind==='item'&&sel.id===it.id;sel={kind:'item',id:it.id};showProps();drag={pid,tool:'select',mode:'move',it,orig:clone(it),start:p,moved:false};arm(drag,was);return;}
   const fb=hitFrameBorder(p);
   if(fb){const was=sel&&sel.kind==='frame'&&sel.id===fb.id;sel={kind:'frame',id:fb.id};showProps();drag={pid,tool:'select',mode:'moveFrame',f:fb,orig:{...fb},start:p,moved:false};arm(drag,was);return;}
@@ -1056,7 +1066,7 @@ function moveSelect(p){
   if(d.mode==='marquee'){const s0=d.start;d.rect={x1:Math.min(s0.x,p.x),y1:Math.min(s0.y,p.y),x2:Math.max(s0.x,p.x),y2:Math.max(s0.y,p.y)};d.crossing=p.x<s0.x;$('#hint').textContent=d.crossing?'ลากซ้าย: เลือกทุกชิ้นที่กรอบแตะ':'ลากขวา: เลือกชิ้นที่อยู่ในกรอบทั้งหมด';return;}
   let dx=p.x-d.start.x,dy=p.y-d.start.y;
   if(!d.moved&&Math.hypot(dx,dy)*view.zoom<4)return;
-  if((d.mode==='move'||d.mode==='moveFrame')&&!d.armed){d.maxMove=Math.max(d.maxMove||0,Math.hypot(dx,dy));return;} // not armed yet: selection only
+  if((d.mode==='move'||d.mode==='moveFrame'||(d.mode==='moveMulti'&&d.armed===false))&&!d.armed){d.maxMove=Math.max(d.maxMove||0,Math.hypot(dx,dy));return;} // not armed yet: selection only
   if(!d.moved){d.moved=true;commit();}
   if(d.mode==='move'||d.mode==='moveMulti'||d.mode==='moveFrame'){const q=lockAngle(d.start,p);dx=q.x-d.start.x;dy=q.y-d.start.y;
     const fr=d.mode==='move'?d.it.frame:(d.mode==='moveMulti'?d.its[0].frame:null);d.label=fmtLen(Math.hypot(dx,dy),fr)+(angleOn()?'  '+angDeg(d.start,q)+'°':'');d.labelAt=p;}
@@ -1099,7 +1109,7 @@ function endSelect(d,p){snapMark=null;dropEmptyText();if(d.armTimer)clearTimeout
     for(const it of doc.items){if(it.type==='dim'&&it.ref)continue;const b=itemBBox(it);if(!isFinite(b.x1))continue;
       const inside=b.x1>=r.x1&&b.x2<=r.x2&&b.y1>=r.y1&&b.y2<=r.y2;const touch=b.x1<=r.x2&&b.x2>=r.x1&&b.y1<=r.y2&&b.y2>=r.y1;
       if(d.crossing?touch:inside)ids.push(it.id);}
-    sel=ids.length===0?null:ids.length===1?{kind:'item',id:ids[0]}:{kind:'multi',ids};showProps();if(ids.length>1)toast('เลือก '+ids.length+' ชิ้น');}}
+    sel=selFromIds(ids);showProps();if(sel&&sel.kind==='multi')toast('เลือก '+sel.ids.length+' ชิ้น');}}
 
 // ---------- properties panel ----------
 const props=$('#props');
@@ -1107,19 +1117,22 @@ function el(html){const t=document.createElement('template');t.innerHTML=html.tr
 function showProps(focusText){
   props.innerHTML='';
   if(mode){props.hidden=false;const src=mode.srcs?mode.srcs.map(itemOf).filter(Boolean).length:itemOf(mode.src);if(!src){mode=null;return showProps();}
-    if(mode.kind==='copy'||mode.kind==='move'){props.append(el(`<span class="lbl"><b>${mode.kind==='move'?'ย้าย':'คัดลอก'}</b> · ${mode.base?'แตะ/ลากไปจุดปลายทาง':'แตะจุดอ้างอิง (□ ปลาย △ กึ่งกลาง ○ ศูนย์กลาง)'}</span>`));if(mode.base){const rb=el(`<button class="btn">เลือกจุดอ้างอิงใหม่</button>`);rb.addEventListener('click',()=>{mode.base=null;$('#hint').textContent=modeHint();showProps();render();});props.append(rb);}}
+    if(mode.kind==='rotate'){props.append(el(`<span class="lbl"><b>หมุน</b> · ${!mode.pivot?'แตะจุดหมุน':!mode.ref?'แตะจุดอ้างอิง แล้วลากไปมุมที่ต้องการ':'ลากไปตำแหน่งใหม่ของจุดอ้างอิง'}</span>`));const lab=el(`<label class="grp"><input type="checkbox"> <span class="lbl">คงต้นฉบับ (หมุนเป็นสำเนา)</span></label>`);const ck=lab.querySelector('input');ck.checked=!!mode.copy;ck.addEventListener('change',()=>{mode.copy=ck.checked;});props.append(lab);if(mode.pivot){const rb=el(`<button class="btn">เลือกจุดหมุนใหม่</button>`);rb.addEventListener('click',()=>{mode.pivot=null;mode.ref=null;$('#hint').textContent=modeHint();showProps();render();});props.append(rb);}}
+    else if(mode.kind==='mirror'){props.append(el(`<span class="lbl"><b>สะท้อน</b> · แตะเส้นตรงที่เป็นแกนสะท้อน</span>`));const lab=el(`<label class="grp"><input type="checkbox"> <span class="lbl">ลบต้นฉบับ</span></label>`);const ck=lab.querySelector('input');ck.checked=!!mode.del;ck.addEventListener('change',()=>{mode.del=ck.checked;});props.append(lab);}
+    else if(mode.kind==='copy'||mode.kind==='move'){props.append(el(`<span class="lbl"><b>${mode.kind==='move'?'ย้าย':'คัดลอก'}</b> · ${mode.base?'แตะ/ลากไปจุดปลายทาง':'แตะจุดอ้างอิง (□ ปลาย △ กึ่งกลาง ○ ศูนย์กลาง)'}</span>`));if(mode.base){const rb=el(`<button class="btn">เลือกจุดอ้างอิงใหม่</button>`);rb.addEventListener('click',()=>{mode.base=null;$('#hint').textContent=modeHint();showProps();render();});props.append(rb);}}
     else{props.append(el(`<span class="lbl"><b>ออฟเซ็ต</b> · แตะด้านที่ต้องการ</span>`));const w=el(`<span class="grp"><span class="lbl">ระยะ</span><input class="num" inputmode="decimal" id="offDist"></span>`);const i=w.querySelector('input');i.value=fmtReal(mode.dist).replace(/ .*$/,'');i.addEventListener('keydown',e=>{if(e.key==='Enter')i.blur();});const takeVal=()=>{const v=parseReal(i.value);if(v>0){mode.dist=v;offsetDef=v;try{localStorage.setItem('ss:offset',String(v));}catch(e){}return true;}return false;};
     i.addEventListener('input',takeVal); // live: the pen tap on the canvas may come before the field blurs
     i.addEventListener('change',()=>{if(!takeVal())i.value=fmtReal(mode.dist).replace(/ .*$/,'');});props.append(w);props.append(el(`<span class="lbl">(หน่วย ${doc.unit==='m'?'ม.':doc.unit==='cm'?'ซม.':'มม.'})</span>`));}
-    const done=el(`<button class="btn primary">${mode.kind==='move'?'ยกเลิก':'เสร็จ'}</button>`);done.addEventListener('click',()=>{if(mode.kind!=='move')sel=null;setMode(null);});props.append(done);return;}
+    const done=el(`<button class="btn primary">${mode.kind==='move'||mode.kind==='mirror'||mode.kind==='rotate'?'ยกเลิก':'เสร็จ'}</button>`);done.addEventListener('click',()=>{if(mode.kind!=='move'&&mode.kind!=='mirror'&&mode.kind!=='rotate')sel=null;setMode(null);});props.append(done);return;}
   if(!sel){props.hidden=true;return;}
   props.hidden=false;
   if(sel.kind==='multi'){const its=sel.ids.map(itemOf).filter(Boolean);if(its.length<2){sel=its.length?{kind:'item',id:its[0].id}:null;return showProps();}
-    props.append(el(`<span class="lbl"><b>เลือก ${its.length} ชิ้น</b> · ลากชิ้นใดก็ได้เพื่อย้ายทั้งกลุ่ม</span>`));
+    props.append(el(`<span class="lbl"><b>${sel.g?'กลุ่ม':'เลือก'} ${its.length} ชิ้น</b> · ลากชิ้นใดก็ได้เพื่อย้ายทั้งหมด</span>`));
+    if(sel.g){const ug=el(`<button class="btn">แยกกลุ่ม</button>`);ug.addEventListener('click',()=>ungroupItems(sel.ids));props.append(ug);}else{const gb=el(`<button class="btn primary">จัดกลุ่ม</button>`);gb.addEventListener('click',()=>groupItems(sel.ids));props.append(gb);if(its.some(i=>i.g)){const ug=el(`<button class="btn">แยกกลุ่ม</button>`);ug.addEventListener('click',()=>ungroupItems(sel.ids));props.append(ug);}}
     const sw=el(`<span class="grp"></span>`);for(const w of WIDTHS){const b=el(`<button class="wbtn" title="${w} มม."><i style="height:${Math.max(1,w*4)}px"></i></button>`);b.addEventListener('click',()=>{commit();its.forEach(i=>{if(i.type!=='dim')i.sw=w;});render();});sw.append(b);}props.append(sw);
     const sl=el(`<span class="grp"></span>`);for(const k in LSTYLES){const b=el(`<button class="wbtn" title="${LSTYLES[k].n}">${lsIcon(k,48)}</button>`);b.addEventListener('click',()=>{commit();its.forEach(i=>{if(i.type!=='dim')i.ls=k;});render();});sl.append(b);}props.append(sl);
     const sc=el(`<span class="grp"></span>`);for(const c of COLORS){const b=el(`<button class="sw" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();its.forEach(i=>i.color=c);render();});sc.append(b);}props.append(sc);
-    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',srcs:sel.ids.slice()}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',srcs:sel.ids.slice()}));props.append(bc);const cp=el(`<button class="btn" title="คัดลอกไว้ แล้วไปวางหน้าอื่นหรือกรอบอื่นได้">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip(sel.ids));props.append(cp);if(its.filter(i=>['line','poly','arc'].includes(i.type)).length>=2){const jb=el(`<button class="btn">รวมเส้นแนวเดียวกัน</button>`);jb.addEventListener('click',()=>joinSelected(sel.ids));props.append(jb);const jc=el(`<button class="btn primary">รวมเป็นรูปเดียว</button>`);jc.addEventListener('click',()=>joinChain(sel.ids));props.append(jc);}
+    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',srcs:sel.ids.slice()}));props.append(bm);const bmi=el(`<button class="btn">สะท้อน</button>`);bmi.addEventListener('click',()=>setMode({kind:'mirror',srcs:sel.ids.slice()}));props.append(bmi);const bro=el(`<button class="btn">หมุน</button>`);bro.addEventListener('click',()=>setMode({kind:'rotate',srcs:sel.ids.slice()}));props.append(bro);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',srcs:sel.ids.slice()}));props.append(bc);const cp=el(`<button class="btn" title="คัดลอกไว้ แล้วไปวางหน้าอื่นหรือกรอบอื่นได้">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip(sel.ids));props.append(cp);if(its.filter(i=>['line','poly','arc'].includes(i.type)).length>=2){const jb=el(`<button class="btn">รวมเส้นแนวเดียวกัน</button>`);jb.addEventListener('click',()=>joinSelected(sel.ids));props.append(jb);const jc=el(`<button class="btn primary">รวมเป็นรูปเดียว</button>`);jc.addEventListener('click',()=>joinChain(sel.ids));props.append(jc);}
     const bf=el(`<button class="btn">เข้ากรอบ…</button>`);bf.addEventListener('click',()=>assignFrameDialog(sel.ids.slice()));props.append(bf);
     const del=el(`<button class="btn danger">ลบ</button>`);del.addEventListener('click',()=>{commit();const ids=new Set(sel.ids);doc.items=doc.items.filter(x=>!ids.has(x.id));purgeDims();sel=null;showProps();render();});props.append(del);
     return;}
@@ -1171,7 +1184,7 @@ function showProps(focusText){
       const hz=el(`<span class="grp"><span class="lbl">ขนาดหัว</span><select class="sel"></select></span>`);const z=hz.querySelector('select');for(const v of [1.5,2,2.5,3,4,5])z.append(new Option(v+' มม.',v));z.value=String(it.hs||2.5);z.addEventListener('change',()=>{commit();it.hs=parseFloat(z.value);textDef.hs=it.hs;saveTextDef();render();});props.append(hz);
       const sw=el(`<span class="grp"></span>`);for(const w of WIDTHS){const b=el(`<button class="wbtn${it.sw===w?' on':''}" title="${w} มม."><i style="height:${Math.max(1,w*4)}px"></i></button>`);b.addEventListener('click',()=>{commit();it.sw=w;render();showProps();});sw.append(b);}props.append(sw);}
     const sc=el(`<span class="grp"></span>`);for(const c of COLORS){const b=el(`<button class="sw${it.color===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.color=c;render();showProps();});sc.append(b);}props.append(sc);
-    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);
+    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bmi=el(`<button class="btn">สะท้อน</button>`);bmi.addEventListener('click',()=>setMode({kind:'mirror',src:it.id}));props.append(bmi);const bro=el(`<button class="btn">หมุน</button>`);bro.addEventListener('click',()=>setMode({kind:'rotate',src:it.id}));props.append(bro);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);
     const del=el(`<button class="btn danger">ลบ</button>`);del.addEventListener('click',()=>{commit();doc.items=doc.items.filter(x=>x.id!==it.id);sel=null;showProps();render();});props.append(del);
     if(focusText)setTimeout(()=>ta.focus(),50);
     return;
@@ -1184,7 +1197,7 @@ function showProps(focusText){
     if(isPat){const pc=el(`<span class="grp"><span class="lbl">สีลาย</span></span>`);for(const c of COLORS){const b=el(`<button class="sw${it.pc===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.pc=c;render();showProps();});pc.append(b);}props.append(pc);}
     const sc=el(`<span class="grp"><span class="lbl">สีพื้น</span></span>`);const nb=el(`<button class="sw${!it.color?' on':''}" style="background:transparent;position:relative" title="ไม่มีสีพื้น"><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px">∅</span></button>`);nb.addEventListener('click',()=>{commit();it.color=null;render();showProps();});sc.append(nb);for(const c of HL_COLORS){const b=el(`<button class="sw${it.color===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.color=c;render();showProps();});sc.append(b);}props.append(sc);
     props.append(el(`<span class="lbl">${it.fillAll?'เติมเต็มพื้นที่ปิด':it.clip?'จำกัดในพื้นที่ปิด':'ระบายอิสระ'}</span>`));
-    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);
+    const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bmi=el(`<button class="btn">สะท้อน</button>`);bmi.addEventListener('click',()=>setMode({kind:'mirror',src:it.id}));props.append(bmi);const bro=el(`<button class="btn">หมุน</button>`);bro.addEventListener('click',()=>setMode({kind:'rotate',src:it.id}));props.append(bro);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);
     const del=el(`<button class="btn danger">ลบ</button>`);del.addEventListener('click',()=>{commit();doc.items=doc.items.filter(x=>x.id!==it.id);sel=null;showProps();render();});props.append(del);return;}
   const names={line:'เส้นตรง',free:'เส้นอิสระ',write:'ลายมือ',rect:'สี่เหลี่ยม',circle:'วงกลม',tri:'สามเหลี่ยมด้านเท่า',arc:'ส่วนโค้ง',poly:'รูปหลายเหลี่ยม'};
   props.append(el(`<span class="lbl">${names[it.type]}${fid?' · '+fmtScale(scaleFor(fid)):''}</span>`));
@@ -1203,7 +1216,7 @@ function showProps(focusText){
   const sw=el(`<span class="grp"></span>`);for(const w of WIDTHS){const b=el(`<button class="wbtn${it.sw===w?' on':''}" title="${w} มม."><i style="height:${Math.max(1,w*4)}px"></i></button>`);b.addEventListener('click',()=>{commit();it.sw=w;render();showProps();});sw.append(b);}props.append(sw);
   const sl=el(`<span class="grp"></span>`);for(const k in LSTYLES){const b=el(`<button class="wbtn${(it.ls||'solid')===k?' on':''}" title="${LSTYLES[k].n}">${lsIcon(k,48)}</button>`);b.addEventListener('click',()=>{commit();it.ls=k;render();showProps();});sl.append(b);}props.append(sl);
   const sc=el(`<span class="grp"></span>`);for(const c of COLORS){const b=el(`<button class="sw${it.color===c?' on':''}" style="background:${c}" aria-label="${c}"></button>`);b.addEventListener('click',()=>{commit();it.color=c;render();showProps();});sc.append(b);}props.append(sc);
-  if(it.type!=='dim'){const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);}
+  if(it.type!=='dim'){const bm=el(`<button class="btn">ย้าย</button>`);bm.addEventListener('click',()=>setMode({kind:'move',src:it.id}));props.append(bm);const bmi=el(`<button class="btn">สะท้อน</button>`);bmi.addEventListener('click',()=>setMode({kind:'mirror',src:it.id}));props.append(bmi);const bro=el(`<button class="btn">หมุน</button>`);bro.addEventListener('click',()=>setMode({kind:'rotate',src:it.id}));props.append(bro);const bc=el(`<button class="btn">คัดลอก</button>`);bc.addEventListener('click',()=>setMode({kind:'copy',src:it.id}));props.append(bc);const cp=el(`<button class="btn">📋 คัดลอกไว้วาง</button>`);cp.addEventListener('click',()=>copyToClip([it.id]));props.append(cp);}
   if(it.type==='rect'||it.type==='tri'||it.type==='poly'){const bx=el(`<button class="btn">แยกเป็นเส้น</button>`);bx.addEventListener('click',()=>explodeItem(it));props.append(bx);}
   if(it.type!=='dim'&&it.type!=='write'){const bf=el(`<button class="btn">เข้ากรอบ…</button>`);bf.addEventListener('click',()=>assignFrameDialog([it.id]));props.append(bf);}
   if(['line','rect','tri','circle','arc'].includes(it.type)){const bo=el(`<button class="btn">ออฟเซ็ต</button>`);bo.addEventListener('click',()=>setMode({kind:'offset',src:it.id,dist:offsetDef}));props.append(bo);}
@@ -1282,6 +1295,10 @@ const CMDS=[ // [aliases, label, action]
   ['O,OFFSET','ออฟเซ็ต (ชิ้นที่เลือก)',()=>{const it=sel&&sel.kind==='item'?itemOf(sel.id):null;if(!it||!['line','rect','tri','circle','arc'].includes(it.type))return toast('เลือกเส้นตรง/สี่เหลี่ยม/สามเหลี่ยม/วงกลม/โค้ง 1 ชิ้นก่อน');setMode({kind:'offset',src:it.id,dist:offsetDef});}],
   ['FR,FRAME,MV,VIEWPORT','กรอบใหม่',()=>{frameMode='new';syncModeLbls();setTool('frame');}],
   ['DE,DETAIL,VIEWDETAIL','ขยายรายละเอียด',()=>{frameMode='detail';syncModeLbls();setTool('detail');}],
+  ['RO,ROTATE','หมุน (ชิ้นที่เลือก: จุดหมุน → จุดอ้างอิง → ลาก)',()=>{const ids=selIds();if(!ids.length)return toast('เลือกชิ้นงานก่อน');setMode({kind:'rotate',srcs:ids});}],
+  ['MI,MIRROR','สะท้อน (ชิ้นที่เลือก แล้วแตะเส้นแกน)',()=>{const ids=selIds();if(!ids.length)return toast('เลือกชิ้นงานก่อน');setMode({kind:'mirror',srcs:ids});}],
+  ['G,GROUP','จัดกลุ่ม (ชิ้นที่เลือก)',()=>groupItems(selIds())],
+  ['UNG,UNGROUP','แยกกลุ่ม',()=>ungroupItems(selIds())],
   ['S,SEL,SELECT,V','เลือก',()=>setTool('select')],
   ['OR,ORTHO,F8','ล็อกมุม 15° (เปิด/ปิด)',()=>toggleAngle()],
   ['U,UNDO','ย้อนกลับ',()=>undo()],
@@ -1482,12 +1499,75 @@ function makeDetail(D,at){ // copy everything inside D.rect, cut at its edges, s
   for(const it of src){if(it.type!=='dim')continue;
     if(it.ref){if(idmap[it.ref]){const c=place(clone(it));c.ref=idmap[it.ref];out.push(c);}}
     else if(it.pa&&inRect(it.pa,Rc)&&inRect(it.pb,Rc))out.push(place(clone(it)));}
-  doc.frames.push(f);doc.items.push(...out);
+  regroup(out);doc.frames.push(f);doc.items.push(...out);
   if(D.mark){const mk={id:uid(),type:'rect',frame:D.fid,sw:0.35,color:'#111111',ls:'dashdot',p:{x:R.x,y:R.y},w:R.w,h:R.h,mark:true};
     const tx={id:uid(),type:'text',frame:D.fid,sw:0.35,color:'#111111',ls:'solid',p:{x:R.x+R.w+1,y:R.y-5.5},text:D.label,ts:3.5,b:true,i:false,u:false,box:true,mark:true};doc.items.push(mk,tx);}
   sel={kind:'frame',id:f.id};setTool('select');showProps();render();
   toast(out.length?'สร้างรายละเอียด '+D.label+' ('+fmtScale(D.scale)+') '+out.length+' ชิ้น'+(R.w*k+2*m>ps.w||R.h*k+2*m>ps.h?' — ใหญ่กว่ากระดาษ บางส่วนถูกตัด':''):'ไม่มีชิ้นงานในบริเวณที่เลือก');}
 
+// ---------- rotate about a pivot (text and numbers stay upright) ----------
+function rotateItem(it,c,ang){const cs=Math.cos(ang),sn=Math.sin(ang);const P=p=>({x:c.x+(p.x-c.x)*cs-(p.y-c.y)*sn,y:c.y+(p.x-c.x)*sn+(p.y-c.y)*cs});const V=v=>({x:v.x*cs-v.y*sn,y:v.x*sn+v.y*cs});
+  switch(it.type){
+    case 'line':case 'guide':case 'leader':it.p1=P(it.p1);it.p2=P(it.p2);break;
+    case 'free':case 'write':case 'poly':it.pts=it.pts.map(P);break;
+    case 'hl':it.pts=it.pts.map(P);if(it.clip)it.clip=it.clip.map(lp=>lp.map(P));if(it.pa!=null){let a=(it.pa+ang*180/Math.PI)%180;if(a<0)a+=180;it.pa=Math.round(a);}break;
+    case 'circle':it.c=P(it.c);break;
+    case 'arc':it.c=P(it.c);it.a0+=ang;it.a1+=ang;break;
+    case 'tri':it.p1=P(it.p1);it.ang+=ang;break;
+    case 'rect':{const q=rectPts(it).map(P);const k=Math.round(ang/(Math.PI/2));if(Math.abs(ang-k*Math.PI/2)<1e-6){const xs=q.map(p=>p.x),ys=q.map(p=>p.y);it.p={x:Math.min(...xs),y:Math.min(...ys)};const w=Math.max(...xs)-it.p.x,h=Math.max(...ys)-it.p.y;it.w=w;it.h=h;}else{it.type='poly';it.pts=q;it.closed=true;delete it.p;delete it.w;delete it.h;}break;}
+    case 'text':{const r=textRect(it);const cc=P({x:r.x+r.w/2,y:r.y+r.h/2});it.p={x:cc.x-r.w/2,y:cc.y-r.h/2};break;}
+    case 'dim':{if(it.pa){it.pa=P(it.pa);it.pb=P(it.pb);}if(it.kind==='rad')it.ang+=ang;if(it.toff)it.toff=V(it.toff);break;}
+  }}
+function rotateGhost(d,p){ // ghost of the selection rotated so the reference point follows the pen
+  const srcs=modeSrcs();if(!srcs.length||!mode.pivot||!mode.ref)return;const c=mode.pivot;
+  const ex=new Set(srcs.map(i=>i.id));for(const it of srcs)for(const dm of dimsOf(it.id))ex.add(dm.id);
+  let q=findSnap(p,'*',ex)||p;let ang=Math.atan2(q.y-c.y,q.x-c.x)-Math.atan2(mode.ref.y-c.y,mode.ref.x-c.x);
+  if(angleOn()){const st=Math.PI/12;ang=Math.round(ang/st)*st;snapMark=null;}else snapMark=findSnap(p,'*',ex);
+  d.temps=srcs.map(x=>{const t=clone(x);t.id='ghost';if(t.type!=='dim'||!t.ref)rotateItem(t,c,ang);return t;});d.temp=d.temps[0];d.ang=ang;
+  let deg=-ang*180/Math.PI;deg=Math.round(deg*10)/10;if(deg<=-180)deg+=360;if(deg>180)deg-=360;d.label='หมุน '+deg+'°';d.labelAt=p;}
+function applyRotate(ang){const srcs=modeSrcs();if(!srcs.length)return;commit();const c=mode.pivot;
+  if(mode.copy){const out=[];const idmap={};for(const it of srcs){if(it.type==='dim'&&it.ref)continue;const t=clone(it);t.id=uid();rotateItem(t,c,ang);idmap[it.id]=t.id;out.push(t);}
+    for(const it of srcs){if(!(it.type==='dim'&&it.ref)||!idmap[it.ref])continue;const t=clone(it);t.id=uid();t.ref=idmap[it.ref];rotateItem(t,c,ang);out.push(t);}
+    regroup(out);doc.items.push(...out);sel=selFromIds(out.filter(o=>!(o.type==='dim'&&o.ref)).map(o=>o.id));}
+  else for(const it of srcs)if(it.type!=='dim'||!it.ref)rotateItem(it,c,ang);
+  let deg=-ang*180/Math.PI;deg=Math.round(deg*10)/10;setMode(null);toast('หมุน '+deg+'° แล้ว');}
+// ---------- mirror across a straight line (text and numbers stay readable) ----------
+function reflector(axis){const a=axis.p1,b=axis.p2;const L=dist(a,b)||1;const ux=(b.x-a.x)/L,uy=(b.y-a.y)/L;const th=Math.atan2(uy,ux);
+  const P=p=>{const dx=p.x-a.x,dy=p.y-a.y;const t=dx*ux+dy*uy;const fx=a.x+ux*t,fy=a.y+uy*t;return {x:2*fx-p.x,y:2*fy-p.y};};
+  const V=v=>{const t=v.x*ux+v.y*uy;return {x:2*ux*t-v.x,y:2*uy*t-v.y};};
+  const A=ang=>2*th-ang;return {P,V,A,th};}
+function mirrorItem(it,R){ // returns the mirrored clone (text/dimension numbers keep their reading direction)
+  const c=clone(it);c.id=uid();
+  switch(it.type){
+    case 'line':case 'guide':case 'leader':c.p1=R.P(it.p1);c.p2=R.P(it.p2);break;
+    case 'free':case 'write':c.pts=it.pts.map(R.P);break;
+    case 'hl':c.pts=it.pts.map(R.P);if(it.clip)c.clip=it.clip.map(lp=>lp.map(R.P));if(it.pa!=null){let a=(2*(R.th*180/Math.PI)-it.pa)%180;if(a<0)a+=180;c.pa=Math.round(a);}break;
+    case 'poly':c.pts=it.pts.map(R.P);break;
+    case 'circle':c.c=R.P(it.c);break;
+    case 'arc':c.c=R.P(it.c);c.a0=R.A(it.a1);c.a1=R.A(it.a0);break;
+    case 'rect':{const q=rectPts(it).map(R.P);const axisAligned=Math.abs(Math.sin(2*R.th))<1e-6;if(axisAligned){const xs=q.map(p=>p.x),ys=q.map(p=>p.y);c.p={x:Math.min(...xs),y:Math.min(...ys)};}else{c.type='poly';c.pts=q;c.closed=true;delete c.p;delete c.w;delete c.h;}break;}
+    case 'tri':{c.type='poly';c.pts=triPts(it).map(R.P);c.closed=true;delete c.p1;delete c.side;delete c.ang;break;}
+    case 'text':{const r=textRect(it);const cc=R.P({x:r.x+r.w/2,y:r.y+r.h/2});c.p={x:cc.x-r.w/2,y:cc.y-r.h/2};break;}
+    case 'dim':{if(it.pa){c.pa=R.P(it.pa);c.pb=R.P(it.pb);}if(it.kind==='rad')c.ang=R.A(it.ang);else c.off=-it.off;if(it.toff)c.toff=R.V(it.toff);break;}
+  }return c;}
+function mirrorItems(ids,axis,del){const set=new Set(ids);set.delete(axis.id);const srcs=doc.items.filter(i=>set.has(i.id)||(i.type==='dim'&&i.ref&&set.has(i.ref)));if(!srcs.length){toast('ไม่มีชิ้นให้สะท้อน');return;}
+  commit();const R=reflector(axis);const idmap={};const out=[];
+  for(const it of srcs){if(it.type==='dim'&&it.ref)continue;const m=mirrorItem(it,R);idmap[it.id]=m.id;out.push(m);}
+  for(const it of srcs){if(!(it.type==='dim'&&it.ref))continue;if(!idmap[it.ref])continue;const m=mirrorItem(it,R);m.ref=idmap[it.ref];if(m.seg!=null){const src=itemOf(it.ref);const dst=out.find(o=>o.id===idmap[it.ref]);if(src&&dst&&dst.type==='poly'&&src.type!=='poly'){/* rect/tri became a polygon: same segment order */}}out.push(m);}
+  regroup(out);doc.items.push(...out);
+  if(del){const ids2=new Set(srcs.map(i=>i.id));doc.items=doc.items.filter(i=>!ids2.has(i.id));purgeDims();}
+  sel=selFromIds(out.filter(o=>!(o.type==='dim'&&o.ref)).map(o=>o.id));setMode(null);showProps();render();toast('สะท้อนแล้ว '+out.length+' ชิ้น'+(del?' (ลบต้นฉบับ)':''));}
+// ---------- groups: items sharing it.g select, move, copy and delete together ----------
+function groupIds(g){return doc.items.filter(i=>i.g===g).map(i=>i.id);}
+function expandGroups(ids){const set=new Set(ids);for(const id of ids){const it=itemOf(id);if(it&&it.g)for(const x of groupIds(it.g))set.add(x);}return [...set];}
+function selFromIds(ids){ids=expandGroups(ids);if(!ids.length)return null;if(ids.length===1)return {kind:'item',id:ids[0]};const gs=new Set(ids.map(id=>(itemOf(id)||{}).g||null));return {kind:'multi',ids,g:gs.size===1?[...gs][0]:null};}
+function groupItems(ids){const its=ids.map(itemOf).filter(Boolean);if(its.length<2){toast('เลือกอย่างน้อย 2 ชิ้น');return;}commit();const g=uid();
+  const set=new Set(its.map(i=>i.id));for(const it of its){it.g=g;for(const dm of dimsOf(it.id))dm.g=g;}
+  sel=selFromIds([...set]);showProps();render();toast('จัดกลุ่ม '+its.length+' ชิ้นแล้ว · แตะชิ้นใดก็เลือกทั้งกลุ่ม');}
+function ungroupItems(ids){const its=ids.map(itemOf).filter(i=>i&&i.g);if(!its.length){toast('ชิ้นที่เลือกไม่ได้อยู่ในกลุ่ม');return;}commit();const gs=new Set(its.map(i=>i.g));for(const it of doc.items)if(gs.has(it.g))delete it.g;
+  sel={kind:'multi',ids:ids.slice()};showProps();render();toast('แยกกลุ่มแล้ว');}
+function regroup(items){ // copies get group ids of their own
+  const map={};for(const it of items)if(it.g){if(!map[it.g])map[it.g]=uid();it.g=map[it.g];}}
 // ---------- clipboard (copy here, paste on any page) ----------
 let clip=null; // {items:[...clones with _s = source scale], pageId}
 function copyToClip(ids){const set=new Set(ids);const its=doc.items.filter(i=>set.has(i.id)||(i.type==='dim'&&i.ref&&set.has(i.ref)));if(!its.length){toast('ไม่มีชิ้นที่เลือก');return;}
@@ -1495,7 +1575,7 @@ function copyToClip(ids){const set=new Set(ids);const its=doc.items.filter(i=>se
   toast('คัดลอก '+its.length+' ชิ้นแล้ว · ไปหน้าที่ต้องการแล้วกด ☰ → วาง (หรือ Ctrl+V)');}
 function pasteClip(){if(!clip||!clip.items.length){toast('ยังไม่มีอะไรให้วาง เลือกชิ้นงานแล้วกด "คัดลอกไว้วาง" ก่อน');return;}
   commit();const idmap={};const its=clip.items.map(i=>{const c=clone(i);const s=c._s;delete c._s;idmap[i.id]=c.id=uid();c._s=s;return c;});
-  for(const c of its)if(c.type==='dim'&&c.ref)c.ref=idmap[c.ref]||null;
+  for(const c of its)if(c.type==='dim'&&c.ref)c.ref=idmap[c.ref]||null;regroup(its);
   // group box → target frame at its centre on this page; keep real size when scales differ
   let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;for(const it of its){if(it.type==='dim'&&it.ref)continue;const b=itemBBox(it);if(!isFinite(b.x1))continue;x1=Math.min(x1,b.x1);y1=Math.min(y1,b.y1);x2=Math.max(x2,b.x2);y2=Math.max(y2,b.y2);}
   if(!isFinite(x1)){x1=y1=20;x2=y2=40;}
@@ -1720,7 +1800,7 @@ window.addEventListener('pointerdown',e=>{if(!e.target.closest('.pop,.menu,#bStr
   if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>render());
   $('#strokeLbl').textContent=strokeW;
 })();
-if(/[?&]debug/.test(location.search))window.__ss={doc:()=>doc,setMode,mode:()=>mode,setSel:v=>{sel=v;showProps();},joinChain,joinItems,joinSelected,copyToClip,pasteClip,gotoPage,clip:()=>clip,sel:()=>sel,hitItem,dimTextHit,toPaper,sel:()=>sel,drag:()=>drag,dimGeom,dimTextPos,dimLinePieces,dimTerms,dimLeader,render:()=>render(),tool:()=>tool,draft:()=>detailDraft,drag:()=>drag,angleOn,angleLock:()=>angleLock,angleTemp:()=>angleTemp,view:()=>view,toScreen,itemOf,dimText,dimGeom};
+if(/[?&]debug/.test(location.search))window.__ss={doc:()=>doc,mirrorItems,groupItems,ungroupItems,setMode,mode:()=>mode,setSel:v=>{sel=v;showProps();},joinChain,joinItems,joinSelected,copyToClip,pasteClip,gotoPage,clip:()=>clip,sel:()=>sel,hitItem,dimTextHit,toPaper,sel:()=>sel,drag:()=>drag,dimGeom,dimTextPos,dimLinePieces,dimTerms,dimLeader,render:()=>render(),tool:()=>tool,draft:()=>detailDraft,drag:()=>drag,angleOn,angleLock:()=>angleLock,angleTemp:()=>angleTemp,view:()=>view,toScreen,itemOf,dimText,dimGeom};
 function mk(type,frame,g,sw,color){const it={id:uid(),type,frame,color:color||'#111111',...g};it.sw=sw;return it;}
 })();
 </script>
