@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bar Cut List</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+</head>
+<body>
+<header>
+  <h1 id="logo" title="หน้ารวม">Bar Cut List</h1>
+  <span class="crumb" id="crumb"></span>
+  <nav class="tabs"><button class="tab" data-page="home">หน้ารวม</button><button class="tab" data-page="summary">สรุป & แผนตัด</button><button class="tab" data-page="cutsheet">ใบตัดเหล็ก</button></nav>
+  <div class="ctl only-model">ชุดคาน <input type="text" id="beamName" value="B1" title="ชื่อชุดคานนี้ (ใช้ในหน้าสรุป)"></div>
+  <div class="ctl only-model">จำนวนช่วง
+    <select id="spanCount"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>
+  <button id="btnProject">⚙ กฎโครงการ</button>
+  <button id="btnPasteAll" class="only-model" disabled>วางทุกช่วง</button>
+  <button id="btnExcel" class="only-report">⬇ Excel</button><button id="btnPrint" class="only-report">🖨 พิมพ์ / PDF</button>
+  <span class="spacer"></span>
+  <button id="btnImport">โหลด JSON</button><input type="file" id="fileImport" accept=".json" class="hide">
+  <button id="btnExport">บันทึก JSON</button>
+  <button id="btnReset">ล้างข้อมูล</button>
+</header>
+
+<div id="pageHome" class="page"></div>
+<div id="pageFooting" class="page hide"></div>
+<div id="membersBar" class="members hide"></div>
+<div id="pageSummary" class="page hide"></div>
+<div id="pageCutsheet" class="page hide"></div>
+<div id="editor" class="page hide">
+  <div class="card">
+    <div class="rowhead">
+      <h2>Model คาน</h2>
+      <span class="spacer"></span>
+      <button id="btnGenerate" class="primary" title="แตกเหล็กทีละเส้นตามตำแหน่งจริง">▶ Generate รายการเหล็ก</button>
+    </div>
+    <div id="warnings" style="display:none"></div>
+    <div id="elevWrap" class="elevwrap"><svg id="elev"></svg><div id="overlays"></div></div>
+    <div class="legend">
+      <span class="lt">เหล็กแกนบน</span><span class="lb">เหล็กแกนล่าง</span>
+      <span class="let">เสริมพิเศษบน (หัวเสา)</span><span class="leb">เสริมพิเศษล่าง (กลางคาน)</span><span class="ls">เหล็กปลอก</span><span class="lw">เหล็กข้าง</span>
+      <span>• = ปลายยื่น/หยุด &nbsp; ┘ = งอฉาก</span>
+    </div>
+  </div>
+
+  <div class="card hide" id="schedCard">
+    <div class="rowhead">
+      <button id="btnSchedToggle" class="tog" title="ย่อ/ขยาย">▾</button>
+      <h2>รายการเหล็กทีละเส้น (Bar Schedule)</h2>
+      <button id="btnRegen" title="คำนวณใหม่จากข้อมูลคานปัจจุบัน">↻ Generate ใหม่</button>
+      <button id="btnSchedReset" title="ล้างค่าความยาว/จำนวนที่แก้เอง">คืนค่าคำนวณ</button>
+      <span class="spacer"></span>
+      <span id="schedTotal" class="hint"></span>
+      <button id="btnToCut" class="primary" title="บันทึกชุดคานนี้เข้ารายการสำหรับทำ Bar Cut List">ส่งไป Bar Cut List →</button>
+    </div>
+    <div id="schedStale" class="stale hide">⚠ ข้อมูลคานเปลี่ยนหลังจาก Generate — กด Generate ใหม่เพื่ออัปเดต</div>
+    <div id="schedWarnings" class="warnbox hide"></div>
+    <div id="schedBody">
+      <div id="sched" class="schedwrap"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>ข้อมูลแต่ละช่วง (หน่วย <span id="unitLabel">มม.</span>)</h2>
+    <table id="tbl"></table>
+  </div>
+</div>
+
+<dialog id="projectModal"><div id="projectBox"></div></dialog>
+
+<script src="js/catalog.js"></script>
+<script src="js/state.js"></script>
+<script src="js/geometry.js"></script>
+<script src="js/schedule.js"></script>
+<script src="js/drawSchedule.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/cutlist.js"></script>
+<script src="js/summary.js"></script>
+<script src="js/cutsheet.js"></script>
+<script src="js/footing.js"></script>
+<script src="js/home.js"></script>
+<script src="js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" async></script>
+</body>
+</html>
