@@ -171,3 +171,6 @@
   - `ovr[key] = { a, leg, lip, w, h, hook }` ระยะที่ผู้ใช้แก้บนรูปทรง (key = ชื่อรายการ|ขนาดเหล็ก)
 - member ฐานราก: `{ type: 'footing', name, sentAt, data: footing, rows: [{ key, label, note, bar, shape, perFooting, qty (= ต่อฐาน × จำนวนฐาน), length }] }`
   - `shape.k`: C (ขางอ + พับปลาย, `up`) | L | I | S (`deg` 90/135) | R (รัดรอบ ขาที่มุม) — รหัสใบตัด: C, L0, L1, L2, S1, S2, R1
+
+## v3.1
+- `member.sel` (ค่าเริ่มต้น = เลือก, `false` = ไม่คิดในรอบนี้) · `collectRows(state, { all: true })` รวมทุกชิ้นส่วนไม่สนการเลือก

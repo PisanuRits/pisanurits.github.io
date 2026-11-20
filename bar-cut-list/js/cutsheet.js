@@ -38,6 +38,8 @@
   BCL.renderCutsheet = function (box, state) {
     const u = BCL.units(state), ms = state.members || [];
     if (!ms.length) { box.innerHTML = `<div class="card"><h2>ใบตัดเหล็ก</h2><p class="hint" style="margin:0 16px">ยังไม่มีชิ้นส่วนที่ส่งมา</p></div>`; return; }
+    if (!ms.some(BCL.isSel)) { box.innerHTML = `<div class="card"><h2>ใบตัดเหล็ก</h2><p class="hint" style="margin:0 16px">ยังไม่ได้เลือกชิ้นส่วน — ติ๊กเลือกชิ้นส่วนที่จะคิดในรอบนี้ด้านบน</p></div>`; box.prepend(BCL.pickBar(state, () => BCL.renderCutsheet(box, state))); return; }
+    if (opts.member && !ms.some(m => BCL.isSel(m) && m.name === opts.member)) opts.member = '';
     let rows = BCL.collectRows(state);
     if (opts.member) rows = rows.filter(r => r.member === opts.member);
     if (opts.sort === 'bar') rows.sort((a, b) => BCL.barD(a.bar) - BCL.barD(b.bar) || b.length - a.length);
@@ -56,7 +58,7 @@
     };
     const tally = {}; rows.forEach(r => tally[r.bar] = (tally[r.bar] || 0) + r.qty);
     let h = `<div class="rowhead noprint"><h2>ใบตัดเหล็ก (Bar Cutting List)</h2><span class="spacer"></span>
-      แสดง: <select id="csMember"><option value="">ทุกชุด (ทั้งโครงการ)</option>${ms.map(m => `<option ${opts.member === m.name ? 'selected' : ''}>${m.name}</option>`).join('')}</select>
+      แสดง: <select id="csMember"><option value="">ทุกชุดที่เลือก</option>${ms.filter(BCL.isSel).map(m => `<option ${opts.member === m.name ? 'selected' : ''}>${m.name}</option>`).join('')}</select>
       เรียงตาม: <select id="csSort"><option value="member" ${opts.sort === 'member' ? 'selected' : ''}>ชุด → รายการ</option><option value="bar" ${opts.sort === 'bar' ? 'selected' : ''}>ขนาดเหล็ก → ความยาว</option><option value="shape" ${opts.sort === 'shape' ? 'selected' : ''}>รูปแบบ</option></select></div>`;
     h += `<div class="sheet"><p class="title">ใบตัดเหล็ก (BAR CUTTING LIST)</p>
       <div class="hd"><div class="k">Project :</div><div class="v">${state.project.name}</div><div class="k">Date :</div><div class="v">${today}</div><div class="k">Zone :</div><div class="v">${zone}</div>
@@ -71,6 +73,7 @@
       <span>รหัส: S1 ปลอกขอ 135° · S2 ปลอกขอ 90° · R1 รัดรอบ · L0 ตรง · L1 งอ 1 ด้าน · L2 งอ 2 ด้าน · C งอ + พับปลาย</span></div>
       <div class="sign"><div>ผู้จัดทำ</div><div>ผู้ตรวจสอบ</div><div>ช่างตัด (รับทราบ)</div></div></div>`;
     box.innerHTML = h;
+    box.prepend(BCL.pickBar(state, () => BCL.renderCutsheet(box, state)));
     box.querySelectorAll('[data-shape]').forEach(td => td.appendChild(BCL.shapeSVG(rows[+td.dataset.shape].shape, u)));
     $('#csMember').onchange = e => { opts.member = e.target.value; BCL.renderCutsheet(box, state); };
     $('#csSort').onchange = e => { opts.sort = e.target.value; BCL.renderCutsheet(box, state); };

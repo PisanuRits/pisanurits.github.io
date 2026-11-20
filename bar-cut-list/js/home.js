@@ -22,14 +22,14 @@
   };
 
   BCL.renderHome = function (box, state, hooks) {
-    const ms = state.members || [], rows = BCL.collectRows(state);
+    const ms = state.members || [], rows = BCL.collectRows(state), allRows = BCL.collectRows(state, { all: true }), nSel = ms.filter(BCL.isSel).length;
     const kg = rows.reduce((a, r) => a + r.weight, 0), pcs = rows.reduce((a, r) => a + r.qty, 0);
     const cnt = t => ms.filter(m => m.type === t).length;
-    const byMember = i => rows.filter(r => r.memberIdx === i).reduce((a, r) => a + r.weight, 0);
+    const byMember = i => allRows.filter(r => r.memberIdx === i).reduce((a, r) => a + r.weight, 0);
     box.innerHTML = `<div class="home">
       <div class="proj">
         <div><span class="k">โครงการ</span><br><input id="hProjName" class="pname" value="${(state.project.name || '').replace(/"/g, '&quot;')}" title="แก้ชื่อโครงการ"></div>
-        <div class="stat"><div><b>${ms.length}</b><span class="k">ชิ้นส่วนที่ส่งแล้ว</span></div><div><b>${fmt(kg, 1)}</b><span class="k">กก. (ตามความยาวตัด)</span></div><div><b>${pcs.toLocaleString('th-TH')}</b><span class="k">ท่อนที่ต้องตัด</span></div></div>
+        <div class="stat"><div><b>${ms.length}</b><span class="k">ชิ้นส่วน (เลือก ${nSel})</span></div><div><b>${fmt(kg, 1)}</b><span class="k">กก. เฉพาะที่เลือก</span></div><div><b>${pcs.toLocaleString('th-TH')}</b><span class="k">ท่อนที่ต้องตัด (ที่เลือก)</span></div></div>
         <span class="spacer"></span>
         ${ms.length ? `<button data-go="summary">สรุป & แผนตัด →</button><button data-go="cutsheet">ใบตัดเหล็ก →</button>` : ''}
       </div>
@@ -37,8 +37,8 @@
           ${t.soon ? '<span class="badge">เร็วๆ นี้</span>' : cnt(t.type) ? `<span class="cnt">${cnt(t.type)} ชุด</span>` : ''}
           ${ICON[t.type]}<h3>${t.t}</h3><p>${t.d}</p></div>`).join('')}</div>
       <div class="mlist"><h4>ชิ้นส่วนที่ส่งไป Bar Cut List แล้ว <span class="spacer"></span><button data-go="footing">+ ฐานราก</button><button data-go="beam">+ คาน</button></h4>
-        ${ms.length ? `<table><tr><th>ประเภท</th><th>ชื่อชุด</th><th>รายละเอียด</th><th>จำนวน</th><th>น้ำหนัก (กก.)</th><th></th></tr>
-          ${ms.map((m, i) => `<tr><td><span class="tag ${TAG[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span></td><td><b>${m.name}</b></td><td class="l">${BCL.memberDesc(m, state)}</td>
+        ${ms.length ? `<table><tr><th title="คิดในสรุป / แผนตัด / ใบตัด"><input type="checkbox" id="hSelAll" ${nSel === ms.length ? 'checked' : ''}> คิดรอบนี้</th><th>ประเภท</th><th>ชื่อชุด</th><th>รายละเอียด</th><th>จำนวน</th><th>น้ำหนัก (กก.)</th><th></th></tr>
+          ${ms.map((m, i) => `<tr class="${BCL.isSel(m) ? '' : 'unsel'}"><td><input type="checkbox" data-msel="${i}" ${BCL.isSel(m) ? 'checked' : ''}></td><td><span class="tag ${TAG[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span></td><td><b>${m.name}</b></td><td class="l">${BCL.memberDesc(m, state)}</td>
             <td>${m.type === 'footing' ? `${m.data.count} ฐาน` : '1 ชุด'}</td><td>${fmt(byMember(i))}</td>
             <td><button data-mload="${i}" title="ดึงกลับมาแก้">✎</button> <button data-mdel="${i}" title="ลบออกจากรายการ">✕</button></td></tr>`).join('')}</table>`
         : `<p class="empty">ยังไม่มีชิ้นส่วน — เลือกประเภทด้านบนเพื่อเริ่ม แล้วกด "ส่งไป Bar Cut List →"</p>`}
@@ -46,6 +46,9 @@
     box.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => hooks.go(b.dataset.go)));
     box.querySelectorAll('[data-mload]').forEach(b => b.addEventListener('click', () => hooks.load(+b.dataset.mload)));
     box.querySelectorAll('[data-mdel]').forEach(b => b.addEventListener('click', () => hooks.del(+b.dataset.mdel)));
+    const reHome = () => { BCL.save(state); BCL.renderHome(box, state, hooks); };
+    box.querySelectorAll('[data-msel]').forEach(c => c.addEventListener('change', () => { ms[+c.dataset.msel].sel = c.checked; reHome(); }));
+    const sa = box.querySelector('#hSelAll'); if (sa) sa.addEventListener('change', () => { ms.forEach(m => m.sel = sa.checked); reHome(); });
     box.querySelector('#hProjName').addEventListener('change', e => { state.project.name = e.target.value || 'โครงการใหม่'; BCL.save(state); });
   };
 })(window.BCL);

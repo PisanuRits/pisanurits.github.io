@@ -12,12 +12,14 @@
   BCL.renderSummary = function (box, state) {
     const u = BCL.units(state), ms = state.members || [];
     if (!ms.length) { box.innerHTML = `<div class="card"><h2>สรุป / Bar Cut List</h2><p class="hint" style="margin:0 16px">ยังไม่มีชิ้นส่วนที่ส่งมา — กลับไปหน้ารวม เลือกฐานราก/คาน แล้วกด "ส่งไป Bar Cut List →"</p></div>`; return; }
+    if (!ms.some(BCL.isSel)) { box.innerHTML = `<div class="card"><h2>สรุป / Bar Cut List</h2><p class="hint" style="margin:0 16px">ยังไม่ได้เลือกชิ้นส่วน — ติ๊กเลือกชิ้นส่วนที่จะคิดในรอบนี้ด้านบน</p></div>`; box.prepend(BCL.pickBar(state, () => BCL.renderSummary(box, state))); return; }
+    if (opts.filterMember && !ms.some(m => BCL.isSel(m) && m.name === opts.filterMember)) opts.filterMember = '';
     const res = BCL.cutPlan(state, { separate: opts.separate });
     const stockT = mm => `${mm / 1000} ม.`;
     let h = '';
 
     // ---------- ① สรุปสั่งเหล็ก ----------
-    h += `<div class="card"><h2>① สรุปสั่งเหล็ก (ใบสั่งซื้อ) <span class="f">โครงการ: ${state.project.name} · ${ms.length} ชุด: ${ms.map(m => m.name).join(', ')}</span></h2>
+    h += `<div class="card"><h2>① สรุปสั่งเหล็ก (ใบสั่งซื้อ) <span class="f">โครงการ: ${state.project.name} · ${ms.filter(BCL.isSel).length} ชุด (ที่เลือก): ${ms.filter(BCL.isSel).map(m => m.name).join(', ')}</span></h2>
       <div class="kpi"><div><b>${fmt0(res.sum.weight)} กก.</b><small>น้ำหนักเหล็กที่ต้องซื้อ</small></div><div><b>${res.sum.bars} เส้น</b><small>เหล็กเส้นทั้งหมด</small></div>
       <div><b>${fmt(res.sum.wastePct)} %</b><small>เศษรวม (${fmt0(res.sum.weight - res.sum.usedWeight)} กก.)</small></div><div><b>${fmt0(res.sum.usedWeight)} กก.</b><small>น้ำหนักเหล็กที่ใช้จริง</small></div></div>
       <div class="tw"><table class="sum"><tr><th>ขนาด</th>${opts.separate ? '<th>ชุด</th>' : ''}<th>ความยาวเส้น</th><th>จำนวน (เส้น)</th><th>นน./เส้น (กก.)</th><th>น้ำหนักรวม (กก.)</th><th>ใช้จริง (ม.)</th><th>เศษ (ม.)</th><th>% เศษ</th></tr>`;
@@ -58,12 +60,13 @@
     const allRows = res.rows, bars = [...new Set(allRows.map(r => r.bar))].sort((a, b) => BCL.barD(a) - BCL.barD(b));
     const fr = allRows.filter(r => (!opts.filterMember || r.member === opts.filterMember) && (!opts.filterBar || r.bar === opts.filterBar));
     h += `<div class="card"><h2>③ รายการเหล็กทั้งหมด (Bar Schedule รวม) <span class="f">กรอง:
-        <select id="optMember"><option value="">ทุกชุด</option>${ms.map(m => `<option ${opts.filterMember === m.name ? 'selected' : ''}>${m.name}</option>`).join('')}</select>
+        <select id="optMember"><option value="">ทุกชุด</option>${ms.filter(BCL.isSel).map(m => `<option ${opts.filterMember === m.name ? 'selected' : ''}>${m.name}</option>`).join('')}</select>
         <select id="optBar"><option value="">ทุกขนาด</option>${bars.map(b => `<option ${opts.filterBar === b ? 'selected' : ''}>${b}</option>`).join('')}</select></span></h2>
       <div class="tw"><table class="sum"><tr><th>#</th><th>ชุด</th><th>ประเภท</th><th>รายการ</th><th>ขนาด</th><th>รูปทรง</th><th>รวมด้าน − หักงอ</th><th>ความยาวตัด (${u.t})</th><th>จำนวน</th><th>รวม (ม.)</th><th>นน. (กก.)</th></tr>`;
     fr.forEach((r, i) => { h += `<tr><td>${i + 1}</td><td>${r.member}</td><td>${BCL.TYPE_T[r.type] || r.type}</td><td class="l">${r.label}</td><td><b>${r.bar}</b></td><td>${r.shape.code} <small>${SHAPE_T[r.shape.code] || ''}</small></td><td><small>${r.deduct ? `${u.out(r.sum)} − ${u.out(r.deduct)}` : '–'}</small></td><td>${u.out(r.length)}</td><td>${r.qty}</td><td>${fmt(r.qty * r.length / 1000, 2)}</td><td>${fmt(r.weight)}</td></tr>`; });
     h += `<tr class="sumrow"><td colspan="8">รวม${opts.filterMember || opts.filterBar ? ' (ตามตัวกรอง)' : 'ทุกรายการ'}</td><td>${fr.reduce((a, r) => a + r.qty, 0)}</td><td>${fmt(fr.reduce((a, r) => a + r.qty * r.length / 1000, 0), 2)}</td><td>${fmt(fr.reduce((a, r) => a + r.weight, 0))}</td></tr></table></div></div>`;
     box.innerHTML = h;
+    box.prepend(BCL.pickBar(state, () => BCL.renderSummary(box, state)));
 
     const re = () => BCL.renderSummary(box, state);
     $('#optSeparate').onchange = e => { opts.separate = e.target.checked; re(); };

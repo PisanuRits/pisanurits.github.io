@@ -2,10 +2,29 @@
 (function (BCL) {
   const P = s => s.project;
 
+  /* ---------- แถบติ๊กเลือกชิ้นส่วนที่จะคิดในรอบนี้ (ใช้ร่วมหน้าสรุป / ใบตัด) ---------- */
+  BCL.isSel = m => m.sel !== false;
+  BCL.pickBar = function (state, onChange) {
+    const ms = state.members || [], nSel = ms.filter(BCL.isSel).length, types = [...new Set(ms.map(m => m.type))];
+    const el = document.createElement('div'); el.className = 'pickbar';
+    el.innerHTML = `<b>คิดเฉพาะที่เลือก (${nSel}/${ms.length})</b>
+      ${ms.map((m, i) => `<label class="pick ${BCL.isSel(m) ? 'on' : ''}"><input type="checkbox" data-pi="${i}" ${BCL.isSel(m) ? 'checked' : ''}> <span class="tag t-${{ footing: 'ft', beam: 'bm', column: 'col', slab: 'sl' }[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span> ${m.name}</label>`).join('')}
+      <span class="spacer"></span>
+      <button data-pa="all">เลือกทั้งหมด</button><button data-pa="none">ไม่เลือกเลย</button>
+      ${types.length > 1 ? types.map(t => `<button data-pa="t:${t}">เฉพาะ${BCL.TYPE_T[t] || t}</button>`).join('') : ''}`;
+    const done = () => { BCL.save(state); onChange(); };
+    el.querySelectorAll('[data-pi]').forEach(c => c.addEventListener('change', () => { ms[+c.dataset.pi].sel = c.checked; done(); }));
+    el.querySelectorAll('[data-pa]').forEach(b => b.addEventListener('click', () => {
+      const a = b.dataset.pa; ms.forEach(m => { m.sel = a === 'all' ? true : a === 'none' ? false : m.type === a.slice(2); }); done();
+    }));
+    return el;
+  };
+
   /* ---------- รวมรายการเหล็กทุกชิ้นส่วน พร้อมข้อมูลรูปทรงสำหรับใบตัด ---------- */
   BCL.collectRows = function (state, filter = {}) {
     const rows = [];
     (state.members || []).forEach((m, mi) => {
+      if (!filter.all && m.sel === false) return;   // ไม่ได้ติ๊กเลือกไว้ (สั่งรอบนี้เฉพาะที่เลือก)
       if (filter.member != null && filter.member !== mi) return;
       if (filter.type && m.type !== filter.type) return;
       const data = m.data || {};
