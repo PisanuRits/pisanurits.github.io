@@ -1,6 +1,6 @@
 /* Doc Scan — สแกนเอกสารเป็น PDF */
 'use strict';
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -27,9 +27,17 @@ const QUALITY = { high: { side: 2480, q: 0.88, f: 1 }, bal: { side: 1754, q: 0.8
 
 /* ---------- toast / sheet ---------- */
 let toastT = 0;
-function toast(msg, ms) {
-  const t = $('toast'); t.textContent = msg; t.classList.add('on');
-  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms || 2600);
+function toast(msg, ms, action) {
+  const t = $('toast'); t.innerHTML = '';
+  t.appendChild(document.createTextNode(msg));
+  if (action) {
+    const b = document.createElement('button'); b.className = 'tact'; b.textContent = action.label;
+    b.onclick = () => { t.classList.remove('on'); action.on(); };
+    t.appendChild(b);
+  }
+  t.classList.toggle('act', !!action);
+  t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms || (action ? 5000 : 2600));
 }
 function openSheet(title, items) {
   const s = $('sheet'); s.innerHTML = '<div class="grab"></div>';
@@ -43,6 +51,7 @@ function openSheet(title, items) {
     b.onclick = () => { if (!it.keep) closeSheet(); it.on && it.on(); };
     s.appendChild(b);
   });
+  $('toast').classList.remove('on');
   $('mask').classList.add('on');
 }
 function closeSheet() { $('mask').classList.remove('on'); }
@@ -163,6 +172,7 @@ async function addSource(blob, liveQuad) {
   return p;
 }
 function onPageChanged(p) {
+  if (!p.busy) scheduleDraft();
   if ($('crop').classList.contains('on') && pages[ci] === p) renderCropMeta();
   if ($('export').classList.contains('on')) renderPages();
   updateStack();
@@ -191,25 +201,92 @@ const DB = {
   open() {
     if (this.db) return Promise.resolve(this.db);
     return new Promise((res, rej) => {
-      const r = indexedDB.open('docscan', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('docs', { keyPath: 'id' });
+      const r = indexedDB.open('docscan', 2);
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains('docs')) db.createObjectStore('docs', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
+      };
       r.onsuccess = () => { this.db = r.result; res(this.db); };
       r.onerror = () => rej(r.error);
     });
   },
-  tx(mode, fn) {
+  tx(store, mode, fn) {
     return this.open().then((db) => new Promise((res, rej) => {
-      const t = db.transaction('docs', mode), st = t.objectStore('docs');
+      const t = db.transaction(store, mode), st = t.objectStore(store);
       const out = fn(st);
       t.oncomplete = () => res(out && out.result);
       t.onerror = () => rej(t.error);
     }));
   },
-  all() { return this.tx('readonly', (s) => s.getAll()); },
-  put(rec) { return this.tx('readwrite', (s) => s.put(rec)); },
-  del(id) { return this.tx('readwrite', (s) => s.delete(id)); },
-  clear() { return this.tx('readwrite', (s) => s.clear()); }
+  all(store) { return this.tx(store || 'docs', 'readonly', (s) => s.getAll()); },
+  put(rec, store) { return this.tx(store || 'docs', 'readwrite', (s) => s.put(rec)); },
+  del(id, store) { return this.tx(store || 'docs', 'readwrite', (s) => s.delete(id)); },
+  clear(store) { return this.tx(store || 'docs', 'readwrite', (s) => s.clear()); }
 };
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+/* ---------- drafts (auto-saved work in progress) ---------- */
+let draftId = null, draftCreated = 0, draftT = 0, drafts = [];
+const draftUrls = [];
+function scheduleDraft() {
+  if (!pages.length || sessionSaved) return;
+  setDraftStat('pending');
+  clearTimeout(draftT); draftT = setTimeout(saveDraft, 700);
+}
+async function saveDraft() {
+  clearTimeout(draftT);
+  if (!pages.length) return;
+  if (!draftId) { draftId = 'r' + Date.now(); draftCreated = Date.now(); }
+  const rec = { id: draftId, created: draftCreated, updated: Date.now(), name: nameEdited ? $('fname').value : '', nameEdited,
+    paper: $('paper').dataset.set ? $('paper').value : '', quality: $('quality').dataset.set ? $('quality').value : '',
+    pages: pages.map((p) => ({ src: p.src, out: p.busy ? null : p.out, outW: p.outW, outH: p.outH, quad: p.quad, detected: p.detected,
+      rot: p.rot, fine: p.fine, filter: p.filter, mode: p.mode, info: p.info, reviewed: p.reviewed })) };
+  try { await DB.put(rec, 'drafts'); setDraftStat('saved'); } catch (e) { setDraftStat('error'); }
+}
+function setDraftStat(st) {
+  const el = $('draftStat'); if (!el) return;
+  el.textContent = st === 'saved' ? '✓ บันทึกฉบับร่างแล้ว' : st === 'error' ? 'บันทึกฉบับร่างไม่สำเร็จ' : st === 'done' ? '✓ บันทึก PDF แล้ว' : 'กำลังบันทึกฉบับร่าง…';
+  el.style.color = st === 'error' ? 'var(--danger)' : st === 'pending' ? 'var(--muted)' : 'var(--accent)';
+}
+async function deleteDraft(id) { try { await DB.del(id, 'drafts'); } catch (e) { /* ignore */ } }
+function resumeDraft(d) {
+  clearSession();
+  draftId = d.id; draftCreated = d.created; nameEdited = !!d.nameEdited;
+  pages = d.pages.map((x) => Object.assign({}, x, { id: ++pid, outUrl: x.out ? URL.createObjectURL(x.out) : null, busy: false, ver: 0 }));
+  sessionMode = (pages[0] && pages[0].mode) || settings.defMode;
+  if (nameEdited) $('fname').value = d.name;
+  if (d.paper) { $('paper').value = d.paper; $('paper').dataset.set = '1'; }
+  if (d.quality) { $('quality').value = d.quality; $('quality').dataset.set = '1'; }
+  pages.filter((p) => !p.out).forEach((p) => processPage(p));
+  openExport();
+  setDraftStat('saved');
+}
+function draftSheet(d) {
+  openSheet('ฉบับร่าง · ' + d.pages.length + ' รูป', [
+    { label: 'ทำต่อ', icon: 'i-edit', pri: true, on: () => resumeDraft(d) },
+    { label: 'ลบฉบับร่าง', icon: 'i-trash', danger: true, on: () => openSheet('ลบฉบับร่างนี้?', [
+      { label: 'ยืนยันลบ', icon: 'i-trash', danger: true, on: async () => { await deleteDraft(d.id); loadDocs(); toast('ลบฉบับร่างแล้ว'); } },
+      { label: 'ยกเลิก' }]) }
+  ]);
+}
+function renderDrafts() {
+  draftUrls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+  const box = $('draftList'); box.innerHTML = '';
+  $('draftSec').hidden = !drafts.length;
+  drafts.forEach((d) => {
+    const b = document.createElement('button'); b.className = 'doc';
+    b.innerHTML = '<img alt=""><span class="t"><span class="n"></span><span class="muted" style="font-size:13px"></span></span><span class="tag" style="color:var(--accent)">ทำต่อ</span>';
+    const first = d.pages[0];
+    const blob = first && (first.out || first.src);
+    if (blob) { const u = URL.createObjectURL(blob); draftUrls.push(u); b.querySelector('img').src = u; }
+    b.querySelector('.n').textContent = d.name || ('ฉบับร่าง · ' + MODE_LABEL[(first && first.mode) || 'doc']);
+    b.querySelector('.muted').textContent = d.pages.length + ' รูป · แก้ล่าสุด ' + fmtDate(d.updated);
+    b.onclick = () => draftSheet(d);
+    box.appendChild(b);
+  });
+}
+
 let docs = [], docFilter = 'all';
 const thumbUrls = new Map();
 const TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -224,9 +301,11 @@ function fmtDate(t) {
 }
 const VIA = { download: ['ดาวน์โหลด', 'var(--muted)'], share: ['แชร์แล้ว', 'var(--fg2)'], drive: ['Drive', 'var(--accent)'] };
 async function loadDocs() {
-  try { docs = (await DB.all()) || []; } catch (e) { docs = []; }
+  try { docs = (await DB.all('docs')) || []; } catch (e) { docs = []; }
+  try { drafts = (await DB.all('drafts')) || []; } catch (e) { drafts = []; }
   docs.sort((a, b) => b.created - a.created);
-  renderDocs();
+  drafts.sort((a, b) => b.updated - a.updated);
+  renderDocs(); renderDrafts();
 }
 function renderChips() {
   const c = $('chips'); c.innerHTML = '';
@@ -593,23 +672,28 @@ function openExport() {
   renderPages();
 }
 let estT = 0;
+function pageLabel(p, k) { return (k + 1) + (p.mode === 'book' ? ' · 2 หน้า' : p.mode === 'card' ? ' · บัตร' : ''); }
 function renderPages() {
   const box = $('pages'); box.innerHTML = '';
   $('pgCount').textContent = pdfPageCount() + ' หน้า';
   pages.forEach((p, i) => {
-    const b = document.createElement('button'); b.className = 'pg'; b.dataset.i = i;
-    b.innerHTML = '<span class="th"></span><span></span>';
-    const th = b.firstChild;
+    const el = document.createElement('div'); el.className = 'pg'; el.dataset.id = p.id;
+    el.innerHTML = '<button class="th" type="button"></button><span class="lb"></span>' +
+      '<button class="grip" type="button" aria-label="ลากเพื่อย้ายหน้า"><svg class="i"><use href="#i-grip"/></svg></button>' +
+      '<button class="del" type="button" aria-label="ลบหน้า"><svg class="i"><use href="#i-x"/></svg></button>';
+    const th = el.querySelector('.th');
+    th.setAttribute('aria-label', 'หน้า ' + (i + 1) + ' แตะเพื่อแก้ไข');
     if (p.outUrl) { const im = document.createElement('img'); im.src = p.outUrl; im.alt = ''; th.appendChild(im); }
-    if (p.busy || !p.outUrl) { const s = document.createElement('i'); s.className = 'spin'; th.appendChild(s); }
-    b.lastChild.textContent = (i + 1) + (p.mode === 'book' ? ' · 2 หน้า' : p.mode === 'card' ? ' · บัตร' : '');
-    b.setAttribute('aria-label', 'หน้า ' + (i + 1));
-    bindPage(b, i);
-    box.appendChild(b);
+    if (p.busy || !p.outUrl) { const sp = document.createElement('i'); sp.className = 'spin'; th.appendChild(sp); }
+    el.querySelector('.lb').textContent = pageLabel(p, i);
+    th.addEventListener('click', () => pageSheet(pages.indexOf(p)));
+    el.querySelector('.del').addEventListener('click', () => removePage(p));
+    el.querySelector('.grip').addEventListener('pointerdown', (e) => startPageDrag(e, el));
+    box.appendChild(el);
   });
-  const add = document.createElement('button'); add.className = 'pg add';
-  add.innerHTML = '<span class="th"><svg class="i" style="width:22px;height:22px"><use href="#i-plus"/></svg></span><span>เพิ่มหน้า</span>';
-  add.onclick = () => openSheet('เพิ่มหน้า', [
+  const add = document.createElement('div'); add.className = 'pg add';
+  add.innerHTML = '<button class="th" type="button" aria-label="เพิ่มหน้า"><svg class="i" style="width:22px;height:22px"><use href="#i-plus"/></svg></button><span class="lb">เพิ่มหน้า</span>';
+  add.querySelector('.th').onclick = () => openSheet('เพิ่มหน้า', [
     { label: 'ถ่ายรูป', icon: 'i-scan', on: () => openCamera() },
     { label: 'นำเข้ารูป', icon: 'i-image', on: () => $('filePick').click() }]);
   box.appendChild(add);
@@ -623,54 +707,84 @@ function updateEstimate() {
     const r = Math.min(1, Q.side / Math.max(p.outW, p.outH));
     tot += p.out.size * r * r * Q.f;
   });
-  $('estSize').textContent = ready ? '~' + fmtSize(tot + 4000) : 'กำลังคำนวณ…';
+  $('estSize').textContent = !pages.length ? '—' : ready ? '~' + fmtSize(tot + 4000) : 'กำลังคำนวณ…';
+}
+function removePage(p) {
+  const i = pages.indexOf(p); if (i < 0) return;
+  pages.splice(i, 1); sessionSaved = false;
+  renderPages(); scheduleDraft();
+  toast('ลบหน้า ' + (i + 1) + ' แล้ว', 5000, { label: 'เลิกทำ', on: () => { pages.splice(Math.min(i, pages.length), 0, p); sessionSaved = false; renderPages(); scheduleDraft(); } });
+}
+function movePage(p, delta) {
+  const i = pages.indexOf(p), j = i + delta;
+  if (i < 0 || j < 0 || j >= pages.length) return;
+  pages.splice(i, 1); pages.splice(j, 0, p); sessionSaved = false;
+  renderPages(); scheduleDraft();
 }
 function pageSheet(i) {
-  const p = pages[i];
-  openSheet('หน้า ' + (i + 1), [
-    { label: 'แก้ไข / ปรับภาพ', icon: 'i-edit', on: () => { cropReturn = 'export'; openCrop(i); } },
-    { label: 'หมุน 90°', icon: 'i-rot', on: () => { p.rot = (p.rot + 90) % 360; processPage(p); } },
-    { label: 'ลบหน้านี้', icon: 'i-trash', danger: true, on: () => {
-      pages.splice(i, 1); if (p.outUrl) URL.revokeObjectURL(p.outUrl); sessionSaved = false;
-      if (!pages.length) { goHome(); return; } renderPages(); } }
-  ]);
+  const p = pages[i]; if (!p) return;
+  const items = [
+    { label: 'แก้ไข / ปรับภาพ', icon: 'i-edit', on: () => { cropReturn = 'export'; openCrop(pages.indexOf(p)); } },
+    { label: 'หมุน 90°', icon: 'i-rot', on: () => { p.rot = (p.rot + 90) % 360; processPage(p); } }];
+  if (i > 0) items.push({ label: 'เลื่อนไปก่อนหน้า', icon: 'i-back', on: () => movePage(p, -1) });
+  if (i < pages.length - 1) items.push({ label: 'เลื่อนไปถัดไป', icon: 'i-fwd', on: () => movePage(p, 1) });
+  items.push({ label: 'ลบหน้านี้', icon: 'i-trash', danger: true, on: () => removePage(p) });
+  openSheet('หน้า ' + (i + 1) + ' จาก ' + pages.length, items);
 }
-function bindPage(el, i) {
-  let timer = 0, startX = 0, startY = 0, dragging = false, ghost = null, moved = false;
-  el.addEventListener('pointerdown', (e) => {
-    startX = e.clientX; startY = e.clientY; moved = false;
-    timer = setTimeout(() => {
-      dragging = true; el.setPointerCapture(e.pointerId); el.classList.add('drag');
-      ghost = el.cloneNode(true); ghost.classList.add('ghost');
-      const r = el.getBoundingClientRect(); ghost.style.width = r.width + 'px'; ghost.style.left = r.left + 'px'; ghost.style.top = r.top + 'px';
-      ghost.dataset.dx = String(e.clientX - r.left); ghost.dataset.dy = String(e.clientY - r.top);
-      document.body.appendChild(ghost);
-      if (navigator.vibrate) navigator.vibrate(15);
-    }, 380);
-  });
-  el.addEventListener('pointermove', (e) => {
-    if (!dragging) { if (Math.hypot(e.clientX - startX, e.clientY - startY) > 10) { clearTimeout(timer); moved = true; } return; }
-    e.preventDefault();
-    ghost.style.left = (e.clientX - Number(ghost.dataset.dx)) + 'px'; ghost.style.top = (e.clientY - Number(ghost.dataset.dy)) + 'px';
-    const under = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.classList && n.classList.contains('pg') && !n.classList.contains('ghost') && n.dataset.i !== undefined);
-    if (under) {
-      const to = Number(under.dataset.i), from = Number(el.dataset.i);
-      if (to !== from) {
-        const [m] = pages.splice(from, 1); pages.splice(to, 0, m); sessionSaved = false;
-        const box = $('pages'), nodes = Array.from(box.children);
-        if (to > from) box.insertBefore(el, nodes[to].nextSibling); else box.insertBefore(el, nodes[to]);
-        Array.from(box.children).forEach((n, k) => { if (n.dataset.i !== undefined) { n.dataset.i = k; n.lastChild.textContent = (k + 1) + (pages[k].mode === 'book' ? ' · 2 หน้า' : pages[k].mode === 'card' ? ' · บัตร' : ''); } });
-      }
-    }
-  });
-  const end = () => {
-    clearTimeout(timer);
-    if (dragging) { dragging = false; el.classList.remove('drag'); if (ghost) ghost.remove(); ghost = null; renderPages(); return 'drag'; }
-    return null;
+/* Drag to reorder: starts instantly from the grip; neighbours slide out of the way (FLIP). */
+function startPageDrag(e, el) {
+  e.preventDefault(); e.stopPropagation();
+  const box = $('pages'), scroller = box.closest('.scroll');
+  const items = () => Array.from(box.querySelectorAll('.pg[data-id]'));
+  const r = el.getBoundingClientRect(), offX = e.clientX - r.left, offY = e.clientY - r.top;
+  const ghost = el.cloneNode(true); ghost.classList.add('ghost');
+  ghost.style.width = r.width + 'px'; ghost.style.left = '0px'; ghost.style.top = '0px';
+  document.body.appendChild(ghost);
+  el.classList.add('drag');
+  if (navigator.vibrate) navigator.vibrate(12);
+  let x = e.clientX, y = e.clientY, scrollT = 0;
+  const place = () => { ghost.style.transform = 'translate(' + (x - offX) + 'px,' + (y - offY) + 'px) scale(1.06)'; };
+  const flip = (mutate) => {
+    const its = items(), before = new Map(its.map((n) => [n, n.getBoundingClientRect()]));
+    mutate();
+    its.forEach((n) => {
+      if (n === el) return;
+      const a = before.get(n), b = n.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
+      if (!dx && !dy) return;
+      n.style.transition = 'none'; n.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      requestAnimationFrame(() => { n.style.transition = 'transform .18s ease'; n.style.transform = ''; });
+    });
   };
-  el.addEventListener('pointerup', () => { if (end() !== 'drag' && !moved) pageSheet(Number(el.dataset.i)); });
-  el.addEventListener('pointercancel', end);
-  el.addEventListener('contextmenu', (e) => e.preventDefault());
+  const reorder = () => {
+    const its = items(); let best = null, bd = Infinity;
+    its.forEach((n) => { const b = n.getBoundingClientRect(), d = Math.hypot(b.left + b.width / 2 - x, b.top + b.height / 2 - y); if (d < bd) { bd = d; best = n; } });
+    if (!best || best === el) return;
+    const from = its.indexOf(el), to = its.indexOf(best);
+    flip(() => { if (to > from) box.insertBefore(el, best.nextSibling); else box.insertBefore(el, best); });
+  };
+  const autoScroll = () => {
+    const b = scroller.getBoundingClientRect();
+    let v = 0;
+    if (y < b.top + 70) v = -Math.ceil((b.top + 70 - y) / 6);
+    else if (y > b.bottom - 70) v = Math.ceil((y - (b.bottom - 70)) / 6);
+    if (v) { scroller.scrollTop += v; reorder(); }
+    scrollT = requestAnimationFrame(autoScroll);
+  };
+  const move = (ev) => { if (ev.pointerId !== e.pointerId) return; x = ev.clientX; y = ev.clientY; place(); reorder(); };
+  const end = (ev) => {
+    if (ev.pointerId !== e.pointerId) return;
+    cancelAnimationFrame(scrollT);
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
+    ghost.remove(); el.classList.remove('drag');
+    const order = items().map((n) => Number(n.dataset.id));
+    const before = pages.map((p) => p.id).join();
+    pages.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    if (pages.map((p) => p.id).join() !== before) { sessionSaved = false; scheduleDraft(); }
+    renderPages();
+  };
+  // listen on window: moving the tile in the DOM drops any pointer capture on the grip
+  window.addEventListener('pointermove', move, { passive: false }); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+  place(); autoScroll();
 }
 async function waitPages() {
   if (pages.some((p) => p.busy || !p.out)) { toast('รอประมวลผลภาพให้เสร็จสักครู่…', 1500); await chain; await sleep(30); }
@@ -767,6 +881,9 @@ async function doExport(via) {
       blob, thumb: new Blob([t.bytes], { type: 'image/jpeg' }), via: res === 'shared' ? (via === 'drive' ? 'drive' : 'share') : 'download' });
     thumbUrls.delete(sessionDocId);
     sessionSaved = true;
+    clearTimeout(draftT);
+    if (draftId) { await deleteDraft(draftId); draftId = null; draftCreated = 0; }
+    setDraftStat('done');
   } catch (e) {
     toast('สร้าง PDF ไม่สำเร็จ: ' + e.message, 4000);
   } finally {
@@ -774,15 +891,18 @@ async function doExport(via) {
   }
 }
 function clearSession() {
+  clearTimeout(draftT);
   pages.forEach((p) => p.outUrl && URL.revokeObjectURL(p.outUrl));
   pages = []; sessionDocId = null; sessionSaved = false; nameEdited = false; dispFor = null;
+  draftId = null; draftCreated = 0;
   $('paper').dataset.set = ''; $('quality').dataset.set = '';
 }
 function leaveExport() {
   if (sessionSaved || !pages.length) { clearSession(); goHome(); return; }
-  openSheet('ยังไม่ได้บันทึก PDF', [
-    { label: 'ทิ้งหน้าที่สแกนไว้', icon: 'i-trash', danger: true, on: () => { clearSession(); goHome(); } },
-    { label: 'กลับไปบันทึก' }]);
+  openSheet('ยังไม่ได้บันทึกเป็น PDF', [
+    { label: 'เก็บเป็นฉบับร่าง ทำต่อภายหลัง', icon: 'i-doc', pri: true, on: async () => { await saveDraft(); clearSession(); goHome(); toast('เก็บฉบับร่างแล้ว ทำต่อได้จากหน้าแรก'); } },
+    { label: 'ทิ้งหน้าที่สแกนไว้', icon: 'i-trash', danger: true, on: async () => { const id = draftId; clearSession(); if (id) await deleteDraft(id); goHome(); } },
+    { label: 'กลับไปแก้ต่อ' }]);
 }
 
 /* ---------- settings ---------- */
@@ -882,10 +1002,10 @@ $('fine').addEventListener('input', (e) => {
 });
 $('expBack').onclick = () => { const i = pages.findIndex((p) => !p.reviewed); cropReturn = 'flow'; openCrop(i < 0 ? pages.length - 1 : i); };
 $('expHome').onclick = leaveExport;
-$('fname').addEventListener('input', () => { nameEdited = true; });
+$('fname').addEventListener('input', () => { nameEdited = true; scheduleDraft(); });
 $('fnameEdit').onclick = () => { const f = $('fname'); f.focus(); f.select(); };
-$('paper').addEventListener('change', () => { $('paper').dataset.set = '1'; });
-$('quality').addEventListener('change', () => { $('quality').dataset.set = '1'; updateEstimate(); });
+$('paper').addEventListener('change', () => { $('paper').dataset.set = '1'; scheduleDraft(); });
+$('quality').addEventListener('change', () => { $('quality').dataset.set = '1'; updateEstimate(); scheduleDraft(); });
 $('doDownload').onclick = () => doExport('download');
 $('doShare').onclick = () => doExport('share');
 $('doDrive').onclick = () => doExport('drive');
@@ -898,6 +1018,7 @@ $('clearAll').onclick = () => openSheet('ลบเอกสารทั้งห
   { label: 'ยืนยันลบทั้งหมด', icon: 'i-trash', danger: true, on: async () => { await DB.clear(); docs = []; toast('ลบแล้ว'); } },
   { label: 'ยกเลิก' }]);
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && pages.length && !sessionSaved) saveDraft();
   if (document.visibilityState === 'hidden' && $('camera').classList.contains('on')) closeCamera();
   else if (document.visibilityState === 'visible' && $('camera').classList.contains('on') && !stream) openCamera();
 });
