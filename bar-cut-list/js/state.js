@@ -20,6 +20,7 @@
       stagger: true, staggerFactor: 1.3,
     },
     stirrup: { firstSpacing: 50, legs: 2, deg: 135 },   // deg = มุมขอปลอกเริ่มต้นของช่วงใหม่
+    floors: ['ชั้น 1', 'ชั้น 2'],              // รายการชั้นของโครงการ (เลือกในหน้าคาน)
     cut: { kerf: 0, minOffcut: 1000 },        // เผื่อรอยตัด / เศษสั้นสุดที่ถือว่าใช้ต่อได้ (มม.)
     bend: { on: true, f90: 2, f135: 3, f180: 4 },   // ค่าหักการงอ = n × d ต่อการงอ 1 ครั้ง (ความยาวตัด = รวมระยะนอก–นอก − ค่าหัก)
     endDefaults: {
@@ -59,7 +60,7 @@
   });                    // on=false ที่ตัวริม = คานยื่น
 
   BCL.defaultState = (n = 2) => {
-    const s = { version: 3, project: BCL.defaultProject(), members: [], footing: BCL.defaultFooting(), beam: { name: 'B1', supports: [], spans: [], spliceOverrides: [] } };
+    const s = { version: 3, project: BCL.defaultProject(), members: [], footing: BCL.defaultFooting(), beam: { name: 'B1', floor: 'ชั้น 1', supports: [], spans: [], spliceOverrides: [] } };
     for (let i = 0; i < n; i++) s.beam.spans.push(BCL.defaultSpan(i));
     for (let i = 0; i <= n; i++) s.beam.supports.push(BCL.defaultSupport());
     return s;
@@ -84,6 +85,7 @@
     state.project = merge(state.project || {}, d.project);
     state.beam = state.beam || {};
     state.beam.name = state.beam.name || 'B1';
+    if (state.beam.floor == null) state.beam.floor = state.project.floors[0] || '';
     state.beam.spans = (state.beam.spans || []).map((sp, i) => {
       // แปลงปลอกรูปแบบเก่า {sEnd,endLen,sMid} → {s,endOn,sEnd,endLen}
       if (sp.stir && sp.stir.s === undefined && sp.stir.sMid !== undefined) { sp.stir.s = sp.stir.sMid; sp.stir.endOn = sp.stir.sEnd !== sp.stir.sMid; delete sp.stir.sMid; }
@@ -93,6 +95,7 @@
     state.beam.supports = (state.beam.supports || []).map(s => merge(s, BCL.defaultSupport()));
     state.beam.spliceOverrides = state.beam.spliceOverrides || [];
     state.members = (state.members || []).map(m => ({ type: 'beam', ...m }));
+    state.members.forEach(m => { if (m.type === 'beam' && m.floor == null) m.floor = (m.data && m.data.floor) || ''; });
     state.footing = merge(state.footing || {}, BCL.defaultFooting());
     BCL.setSpanCount(state, state.beam.spans.length);
     state.version = 3;

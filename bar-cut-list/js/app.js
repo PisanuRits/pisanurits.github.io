@@ -52,7 +52,7 @@
       BCL.renderOverlays($('#overlays'), state, G, L);
       BCL.renderTable($('#tbl'), state, G, L);
       $('#spanCount').value = state.beam.spans.length;
-      $('#beamName').value = state.beam.name;
+      $('#beamName').value = state.beam.name; renderFloorSel();
       $('#btnPasteAll').disabled = !BCL.hasClipboard();
       BCL.bindInputs($('#editor'), state, onModelChange);
     } else {
@@ -70,7 +70,7 @@
     const TYPE = { beam: 'คาน', column: 'เสา', slab: 'พื้น', footing: 'ฐานราก' };
     bar.innerHTML = `<b>ส่งไป Bar Cut List แล้ว ${ms.length} ชุด:</b>` + ms.map((m, i) => {
       const kg = m.rows.reduce((a, r) => a + r.qty * r.length / 1000 * BCL.bar(r.bar).w, 0);
-      return `<span class="chip" title="${TYPE[m.type] || m.type} · ${m.rows.length} รายการ · ≈ ${kg.toFixed(1)} กก.">${m.name}
+      return `<span class="chip" title="${TYPE[m.type] || m.type} · ${m.rows.length} รายการ · ≈ ${kg.toFixed(1)} กก.">${BCL.memberLabel(m)}
         <button data-mload="${i}" title="ดึงกลับมาแก้">✎</button><button class="del" data-mdel="${i}" title="ลบออกจากรายการ">✕</button></span>`;
     }).join('') + `<span class="spacer"></span><button data-gotab="summary">ดูสรุป & แผนตัด →</button><button data-gotab="cutsheet">ใบตัดเหล็ก →</button>`;
     bar.querySelectorAll('[data-mload]').forEach(b => b.addEventListener('click', () => {
@@ -119,19 +119,30 @@
     if (issues.length && !confirm(`มีคำเตือน ${issues.length} รายการ (เช่น ${issues[0]}) ส่งต่อหรือไม่?`)) return;
     const name = state.beam.name || 'B';
     const rows = BCL.scheduleRows(state);
-    const member = { type: 'beam', name, sentAt: Date.now(), data: BCL.clone(state.beam), rows };
-    const idx = (state.members || []).findIndex(m => m.name === name && m.type === 'beam');
-    if (idx >= 0) { if (!confirm(`มีชุดชื่อ "${name}" อยู่แล้ว — แทนที่?`)) return; state.members[idx] = member; } else state.members.push(member);
+    const floor = state.beam.floor || '';
+    const member = { type: 'beam', name, floor, sentAt: Date.now(), data: BCL.clone(state.beam), rows };
+    const idx = (state.members || []).findIndex(m => m.name === name && m.type === 'beam' && (m.floor || '') === floor);
+    if (idx >= 0) { if (!confirm(`มีคานชื่อ "${name}"${floor ? ' ใน' + floor : ''} อยู่แล้ว — แทนที่?`)) return; state.members[idx] = member; } else state.members.push(member);
     // เริ่มชุดถัดไป: คงค่าเป็นแม่แบบ หรือเริ่มใหม่
     const keep = confirm(`ส่ง "${name}" แล้ว (${rows.length} รายการ)\n\nตกลง = คงค่าชุดนี้ไว้เป็นแม่แบบสำหรับชุดถัดไป\nยกเลิก = เริ่มชุดใหม่จากค่าเริ่มต้น`);
     const next = name.replace(/(\d+)$/, m => String(+m + 1));
     if (keep) { delete state.beam.schedule; state.beam.name = next === name ? name + '-2' : next; }
-    else { const p = state.project, ms = state.members; state = BCL.defaultState(2); state.project = p; state.members = ms; state.beam.name = next === name ? name + '-2' : next; }
+    else { const p = state.project, ms = state.members, ft = state.footing; state = BCL.defaultState(2); state.project = p; state.members = ms; state.footing = ft; state.beam.name = next === name ? name + '-2' : next; state.beam.floor = floor; }
     BCL.save(state); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   function onModelChange(el, light) { if (state.beam.schedule) state.beam.schedule.stale = true; BCL.save(state); render(!!light); }
 
   $('#spanCount').addEventListener('change', e => { BCL.setSpanCount(state, +e.target.value); onModelChange(); });
+  function renderFloorSel() {
+    const fl = state.project.floors || (state.project.floors = []), cur = state.beam.floor || '';
+    if (cur && !fl.includes(cur)) fl.push(cur);
+    $('#beamFloor').innerHTML = (cur ? '' : '<option value="" selected>— เลือกชั้น —</option>') + fl.map(f => `<option ${f === cur ? 'selected' : ''}>${f.replace(/</g, '&lt;')}</option>`).join('') + '<option value="__add">+ เพิ่มชั้น…</option>';
+  }
+  $('#beamFloor').addEventListener('change', e => {
+    let v = e.target.value;
+    if (v === '__add') { v = (prompt('ชื่อชั้นใหม่ (เช่น ชั้น 3, ชั้นลอย, หลังคา)') || '').trim(); if (!v) { renderFloorSel(); return; } if (!state.project.floors.includes(v)) state.project.floors.push(v); }
+    state.beam.floor = v; BCL.save(state); renderFloorSel(); updateCrumb();
+  });
   $('#beamName').addEventListener('input', e => { state.beam.name = e.target.value || 'B'; onModelChange(e.target, true); });
   $('#beamName').addEventListener('change', () => onModelChange());
   $('#btnPasteAll').addEventListener('click', () => { if (BCL.pasteAll(state)) onModelChange(); });
@@ -158,7 +169,7 @@
   const CLS = { home: 'tab-home', footing: 'tab-footing', beam: 'tab-model', summary: 'tab-summary', cutsheet: 'tab-cutsheet' };
   function updateCrumb() {
     const home = '<a data-p="home">หน้ารวม</a>';
-    $('#crumb').innerHTML = page === 'home' ? '' : page === 'footing' ? `${home} › ฐานราก › <b>${state.footing.name}</b>` : page === 'beam' ? `${home} › คาน` : `${home} › ${page === 'summary' ? 'สรุป & แผนตัด' : 'ใบตัดเหล็ก'}`;
+    $('#crumb').innerHTML = page === 'home' ? '' : page === 'footing' ? `${home} › ฐานราก › <b>${state.footing.name}</b>` : page === 'beam' ? `${home} › คาน › <b>${[state.beam.floor, state.beam.name].filter(Boolean).join(' · ')}</b>` : `${home} › ${page === 'summary' ? 'สรุป & แผนตัด' : 'ใบตัดเหล็ก'}`;
     $('#crumb').querySelectorAll('[data-p]').forEach(a => a.onclick = () => showPage(a.dataset.p));
   }
   function showPage(p, keepScroll) {

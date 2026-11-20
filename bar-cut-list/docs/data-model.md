@@ -179,3 +179,6 @@
 - `beam.ovr[id|bar] = { leg, leg2 }` (เหล็กแกน) หรือ `{ w, h, hook }` (ปลอก) — ระยะที่แก้บนรูปทรง; แก้ช่วงตรง `a` ยังเก็บใน `item.userLength` (นอก–นอกตามขอเดิม ใช้วางตำแหน่ง/ทาบ)
 - shape C รองรับ `leg2` (ขอขวา ≠ ขอซ้าย; ไม่ระบุ = เท่า leg) · item ปลอกเก็บ `w, h, hook`
 - `BCL.beamBarRows(state, beam)` → แถวรูปทรง/ความยาวตัด ใช้ทั้งหน้าคาน, scheduleRows และ collectRows
+
+## v3.5
+- `project.floors[]` รายการชั้น · `beam.floor` · member คาน `floor` · `BCL.memberGroup(m)` (ฐานราก | ชั้น) · `BCL.memberLabel(m)` = "ชั้น · ชื่อ" · `collectRows` เรียงตามกลุ่ม แถวมี `floor`

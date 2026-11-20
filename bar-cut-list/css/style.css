@@ -220,6 +220,8 @@ table.cst tr.grp td{background:#f1f3f5;text-align:left;font-weight:700;padding:3
 .pickbar .pick{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:16px;padding:2px 10px 2px 6px;cursor:pointer;color:var(--muted);background:#f8f9fa}
 .pickbar .pick.on{color:var(--text);background:#eef3ff;border-color:#b6ccfb}
 .pickbar button{padding:3px 8px;font-size:12px}
+.mlist tr.grp td{background:#f1f3f5;font-weight:700;color:#495057} .mlist tr.grp .cnt{font-weight:normal;color:var(--muted);font-size:12px;margin-left:6px}
+.pickbar .pgrp{font-weight:700;color:#495057;margin-left:6px}
 .mlist tr.unsel td{color:#adb5bd} .mlist tr.unsel .tag{opacity:.5}
 @media print{.pickbar{display:none!important}
   @page{size:A4 landscape;margin:10mm}

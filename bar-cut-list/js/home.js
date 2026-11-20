@@ -38,9 +38,12 @@
           ${ICON[t.type]}<h3>${t.t}</h3><p>${t.d}</p></div>`).join('')}</div>
       <div class="mlist"><h4>ชิ้นส่วนที่ส่งไป Bar Cut List แล้ว <span class="spacer"></span><button data-go="footing">+ ฐานราก</button><button data-go="beam">+ คาน</button></h4>
         ${ms.length ? `<table><tr><th title="คิดในสรุป / แผนตัด / ใบตัด"><input type="checkbox" id="hSelAll" ${nSel === ms.length ? 'checked' : ''}> คิดรอบนี้</th><th>ประเภท</th><th>ชื่อชุด</th><th>รายละเอียด</th><th>จำนวน</th><th>น้ำหนัก (กก.)</th><th></th></tr>
-          ${ms.map((m, i) => `<tr class="${BCL.isSel(m) ? '' : 'unsel'}"><td><input type="checkbox" data-msel="${i}" ${BCL.isSel(m) ? 'checked' : ''}></td><td><span class="tag ${TAG[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span></td><td><b>${m.name}</b></td><td class="l">${BCL.memberDesc(m, state)}</td>
+          ${BCL.groupOrder(state).map(g => { const idx = BCL.memberOrder(state).filter(i => BCL.memberGroup(ms[i]) === g), allOn = idx.every(i => BCL.isSel(ms[i]));
+            const gkg = idx.reduce((a, i) => a + byMember(i), 0);
+            return `<tr class="grp"><td><input type="checkbox" data-gsel="${g.replace(/"/g, '&quot;')}" ${allOn ? 'checked' : ''} title="เลือก/ยกเลิกทั้งกลุ่ม"></td><td colspan="6">${g} <span class="cnt">${idx.length} ชุด · ${fmt(gkg)} กก.</span></td></tr>` +
+            idx.map(i => { const m = ms[i]; return `<tr class="${BCL.isSel(m) ? '' : 'unsel'}"><td><input type="checkbox" data-msel="${i}" ${BCL.isSel(m) ? 'checked' : ''}></td><td><span class="tag ${TAG[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span></td><td><b>${m.name}</b></td><td class="l">${BCL.memberDesc(m, state)}</td>
             <td>${m.type === 'footing' ? `${m.data.count} ฐาน` : '1 ชุด'}</td><td>${fmt(byMember(i))}</td>
-            <td><button data-mload="${i}" title="ดึงกลับมาแก้">✎</button> <button data-mdel="${i}" title="ลบออกจากรายการ">✕</button></td></tr>`).join('')}</table>`
+            <td><button data-mload="${i}" title="ดึงกลับมาแก้">✎</button> <button data-mdel="${i}" title="ลบออกจากรายการ">✕</button></td></tr>`; }).join(''); }).join('')}</table>`
         : `<p class="empty">ยังไม่มีชิ้นส่วน — เลือกประเภทด้านบนเพื่อเริ่ม แล้วกด "ส่งไป Bar Cut List →"</p>`}
       </div></div>`;
     box.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => hooks.go(b.dataset.go)));
@@ -48,6 +51,7 @@
     box.querySelectorAll('[data-mdel]').forEach(b => b.addEventListener('click', () => hooks.del(+b.dataset.mdel)));
     const reHome = () => { BCL.save(state); BCL.renderHome(box, state, hooks); };
     box.querySelectorAll('[data-msel]').forEach(c => c.addEventListener('change', () => { ms[+c.dataset.msel].sel = c.checked; reHome(); }));
+    box.querySelectorAll('[data-gsel]').forEach(c => c.addEventListener('change', () => { ms.forEach(m => { if (BCL.memberGroup(m) === c.dataset.gsel) m.sel = c.checked; }); reHome(); }));
     const sa = box.querySelector('#hSelAll'); if (sa) sa.addEventListener('change', () => { ms.forEach(m => m.sel = sa.checked); reHome(); });
     box.querySelector('#hProjName').addEventListener('change', e => { state.project.name = e.target.value || 'โครงการใหม่'; BCL.save(state); });
   };

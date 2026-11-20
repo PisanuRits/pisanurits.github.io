@@ -4,18 +4,28 @@
 
   /* ---------- แถบติ๊กเลือกชิ้นส่วนที่จะคิดในรอบนี้ (ใช้ร่วมหน้าสรุป / ใบตัด) ---------- */
   BCL.isSel = m => m.sel !== false;
+  /* กลุ่มของชิ้นส่วน: ฐานราก = กลุ่มเดียว · คาน = ตามชั้น */
+  BCL.memberGroup = m => m.type === 'footing' ? 'ฐานราก' : (m.floor || 'ไม่ระบุชั้น');
+  BCL.memberLabel = m => m.type !== 'footing' && m.floor ? `${m.floor} · ${m.name}` : m.name;
+  BCL.groupOrder = state => {   // ลำดับกลุ่ม: ฐานราก → ชั้นตามรายการโครงการ → อื่นๆ
+    const fl = state.project.floors || [], gs = [...new Set((state.members || []).map(BCL.memberGroup))];
+    const rank = g => g === 'ฐานราก' ? -1 : fl.indexOf(g) >= 0 ? fl.indexOf(g) : 999;
+    return gs.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'th'));
+  };
+  BCL.memberOrder = state => { const ms = state.members || [], go = BCL.groupOrder(state);
+    return ms.map((m, i) => i).sort((a, b) => go.indexOf(BCL.memberGroup(ms[a])) - go.indexOf(BCL.memberGroup(ms[b])) || a - b); };
   BCL.pickBar = function (state, onChange) {
     const ms = state.members || [], nSel = ms.filter(BCL.isSel).length, types = [...new Set(ms.map(m => m.type))];
     const el = document.createElement('div'); el.className = 'pickbar';
     el.innerHTML = `<b>คิดเฉพาะที่เลือก (${nSel}/${ms.length})</b>
-      ${ms.map((m, i) => `<label class="pick ${BCL.isSel(m) ? 'on' : ''}"><input type="checkbox" data-pi="${i}" ${BCL.isSel(m) ? 'checked' : ''}> <span class="tag t-${{ footing: 'ft', beam: 'bm', column: 'col', slab: 'sl' }[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span> ${m.name}</label>`).join('')}
+      ${BCL.groupOrder(state).map(g => `<span class="pgrp">${g}:</span>` + BCL.memberOrder(state).filter(i => BCL.memberGroup(ms[i]) === g).map(i => { const m = ms[i]; return `<label class="pick ${BCL.isSel(m) ? 'on' : ''}"><input type="checkbox" data-pi="${i}" ${BCL.isSel(m) ? 'checked' : ''}> <span class="tag t-${{ footing: 'ft', beam: 'bm', column: 'col', slab: 'sl' }[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span> ${m.name}</label>`; }).join('')).join('')}
       <span class="spacer"></span>
       <button data-pa="all">เลือกทั้งหมด</button><button data-pa="none">ไม่เลือกเลย</button>
-      ${types.length > 1 ? types.map(t => `<button data-pa="t:${t}">เฉพาะ${BCL.TYPE_T[t] || t}</button>`).join('') : ''}`;
+      ${BCL.groupOrder(state).length > 1 ? BCL.groupOrder(state).map(g => `<button data-pa="g:${g}">เฉพาะ${g}</button>`).join('') : ''}`;
     const done = () => { BCL.save(state); onChange(); };
     el.querySelectorAll('[data-pi]').forEach(c => c.addEventListener('change', () => { ms[+c.dataset.pi].sel = c.checked; done(); }));
     el.querySelectorAll('[data-pa]').forEach(b => b.addEventListener('click', () => {
-      const a = b.dataset.pa; ms.forEach(m => { m.sel = a === 'all' ? true : a === 'none' ? false : m.type === a.slice(2); }); done();
+      const a = b.dataset.pa; ms.forEach(m => { m.sel = a === 'all' ? true : a === 'none' ? false : BCL.memberGroup(m) === a.slice(2); }); done();
     }));
     return el;
   };
@@ -23,7 +33,7 @@
   /* ---------- รวมรายการเหล็กทุกชิ้นส่วน พร้อมข้อมูลรูปทรงสำหรับใบตัด ---------- */
   BCL.collectRows = function (state, filter = {}) {
     const rows = [];
-    (state.members || []).forEach((m, mi) => {
+    BCL.memberOrder(state).forEach(mi => { const m = state.members[mi];
       if (!filter.all && m.sel === false) return;   // ไม่ได้ติ๊กเลือกไว้ (สั่งรอบนี้เฉพาะที่เลือก)
       if (filter.member != null && filter.member !== mi) return;
       if (filter.type && m.type !== filter.type) return;
@@ -32,14 +42,14 @@
         (m.rows || []).forEach(fr => {
           const sum = Math.round(BCL.fLenOf(fr.shape)), bends = BCL.fBendsOf(fr.shape), deduct = BCL.bendDeduct(state, fr.bar, bends), length = sum - deduct;
           if (!(fr.qty > 0) || !(length > 0)) return;
-          rows.push({ member: m.name, memberIdx: mi, type: m.type, label: fr.label + (fr.note ? ` (${fr.note})` : ''), kind: 'footing', bar: fr.bar, length, sum, deduct, bends, qty: fr.qty,
+          rows.push({ member: BCL.memberLabel(m), floor: BCL.memberGroup(m), memberIdx: mi, type: m.type, label: fr.label + (fr.note ? ` (${fr.note})` : ''), kind: 'footing', bar: fr.bar, length, sum, deduct, bends, qty: fr.qty,
             weight: fr.qty * length / 1000 * BCL.bar(fr.bar).w, shape: { ...fr.shape, code: BCL.fCode(fr.shape), f: true }, lap: 0, id: fr.key });
         });
         return;
       }
       BCL.beamBarRows(state, data).forEach(r => {   // คาน: รูปทรงระบบเดียวกับฐานราก
         const it = r.item; if (!(r.qty > 0) || !(r.cut > 0)) return;
-        rows.push({ member: m.name, memberIdx: mi, type: m.type, label: r.label, kind: it.kind, bar: r.bar, length: r.cut, sum: r.sum, deduct: r.deduct, bends: r.bends, qty: r.qty,
+        rows.push({ member: BCL.memberLabel(m), floor: BCL.memberGroup(m), memberIdx: mi, type: m.type, label: r.label, kind: it.kind, bar: r.bar, length: r.cut, sum: r.sum, deduct: r.deduct, bends: r.bends, qty: r.qty,
           weight: r.weight, shape: { ...r.shape, code: r.code, f: true, zones: it.zones }, lap: it.lapReq || 0, piece: it.piece, of: it.of, runId: it.runId, id: it.id });
       });
     });

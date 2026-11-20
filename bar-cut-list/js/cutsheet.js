@@ -39,13 +39,13 @@
     const u = BCL.units(state), ms = state.members || [];
     if (!ms.length) { box.innerHTML = `<div class="card"><h2>ใบตัดเหล็ก</h2><p class="hint" style="margin:0 16px">ยังไม่มีชิ้นส่วนที่ส่งมา</p></div>`; return; }
     if (!ms.some(BCL.isSel)) { box.innerHTML = `<div class="card"><h2>ใบตัดเหล็ก</h2><p class="hint" style="margin:0 16px">ยังไม่ได้เลือกชิ้นส่วน — ติ๊กเลือกชิ้นส่วนที่จะคิดในรอบนี้ด้านบน</p></div>`; box.prepend(BCL.pickBar(state, () => BCL.renderCutsheet(box, state))); return; }
-    if (opts.member && !ms.some(m => BCL.isSel(m) && m.name === opts.member)) opts.member = '';
+    if (opts.member && !ms.some(m => BCL.isSel(m) && BCL.memberLabel(m) === opts.member)) opts.member = '';
     let rows = BCL.collectRows(state);
     if (opts.member) rows = rows.filter(r => r.member === opts.member);
     if (opts.sort === 'bar') rows.sort((a, b) => BCL.barD(a.bar) - BCL.barD(b.bar) || b.length - a.length);
     else if (opts.sort === 'shape') rows.sort((a, b) => a.shape.code.localeCompare(b.shape.code) || BCL.barD(a.bar) - BCL.barD(b.bar) || b.length - a.length);
     const today = new Date().toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const zone = opts.member || ms.map(m => m.name).join(', ');
+    const zone = opts.member || [...new Set(rows.map(r => r.member))].join(', ');
     const note = r => {
       const n = [];
       if (r.shape.f) {
@@ -58,7 +58,7 @@
     };
     const tally = {}; rows.forEach(r => tally[r.bar] = (tally[r.bar] || 0) + r.qty);
     let h = `<div class="rowhead noprint"><h2>ใบตัดเหล็ก (Bar Cutting List)</h2><span class="spacer"></span>
-      แสดง: <select id="csMember"><option value="">ทุกชุดที่เลือก</option>${ms.filter(BCL.isSel).map(m => `<option ${opts.member === m.name ? 'selected' : ''}>${m.name}</option>`).join('')}</select>
+      แสดง: <select id="csMember"><option value="">ทุกชุดที่เลือก</option>${BCL.memberOrder(state).map(i => ms[i]).filter(BCL.isSel).map(m => `<option ${opts.member === BCL.memberLabel(m) ? 'selected' : ''}>${BCL.memberLabel(m)}</option>`).join('')}</select>
       เรียงตาม: <select id="csSort"><option value="member" ${opts.sort === 'member' ? 'selected' : ''}>ชุด → รายการ</option><option value="bar" ${opts.sort === 'bar' ? 'selected' : ''}>ขนาดเหล็ก → ความยาว</option><option value="shape" ${opts.sort === 'shape' ? 'selected' : ''}>รูปแบบ</option></select></div>`;
     h += `<div class="sheet"><p class="title">ใบตัดเหล็ก (BAR CUTTING LIST)</p>
       <div class="hd"><div class="k">Project :</div><div class="v">${state.project.name}</div><div class="k">Date :</div><div class="v">${today}</div><div class="k">Zone :</div><div class="v">${zone}</div>
@@ -66,7 +66,7 @@
       <table class="cst"><tr><th style="width:40px">No.</th><th style="width:60px">รหัส<br>รูปแบบ</th><th>รูปแบบ (ระยะ ${u.t})</th><th style="width:70px">เหล็ก</th><th style="width:80px">ตัด<br>(${u.t})</th><th style="width:70px">จำนวน<br>(เส้น)</th><th style="width:170px">ตำแหน่ง</th><th style="width:180px">หมายเหตุ</th></tr>`;
     let last = null;
     rows.forEach((r, i) => {
-      if (opts.sort === 'member' && r.member !== last) { last = r.member; const m = ms.find(x => x.name === r.member); h += `<tr class="grp"><td colspan="8">ชุด ${r.member} (${BCL.TYPE_T[r.type] || r.type}) — ${BCL.memberDesc(m, state)}${m.type === 'footing' ? ` · ${m.data.count} ฐาน (จำนวนรวมแล้ว)` : ''}</td></tr>`; }
+      if (opts.sort === 'member' && r.member !== last) { last = r.member; const m = ms[r.memberIdx]; h += `<tr class="grp"><td colspan="8">${r.member} (${BCL.TYPE_T[r.type] || r.type}) — ${BCL.memberDesc(m, state)}${m.type === 'footing' ? ` · ${m.data.count} ฐาน (จำนวนรวมแล้ว)` : ''}</td></tr>`; }
       h += `<tr><td>${i + 1}</td><td class="big">${r.shape.code}</td><td class="shape" data-shape="${i}"></td><td class="big">${r.bar}</td><td class="big">${u.out(r.length)}</td><td class="big">${r.qty}</td><td>${r.member}<br><small>${r.label}</small></td><td class="note">${note(r)}</td></tr>`;
     });
     h += `</table><div class="sum"><span>รวม: ${Object.entries(tally).sort((a, b) => BCL.barD(a[0]) - BCL.barD(b[0])).map(([b, n]) => `${b} = ${n} เส้น`).join(' · ')}</span>
@@ -82,10 +82,10 @@
   BCL.cutsheetSheet = function (state) {
     const u = BCL.units(state);
     let rows = BCL.collectRows(state); if (opts.member) rows = rows.filter(r => r.member === opts.member);
-    const out = [['No.', 'รหัสรูปแบบ', 'รูปทรง', `ระยะ A (${u.t})`, `ระยะ B (${u.t})`, `ระยะ C (${u.t})`, 'เหล็ก', `รวมด้าน (${u.t})`, `หักงอ (${u.t})`, `ตัด (${u.t})`, 'จำนวน', 'ชุด', 'ตำแหน่ง', 'น้ำหนัก (กก.)']];
+    const out = [['No.', 'รหัสรูปแบบ', 'รูปทรง', `ระยะ A (${u.t})`, `ระยะ B (${u.t})`, `ระยะ C (${u.t})`, 'เหล็ก', `รวมด้าน (${u.t})`, `หักงอ (${u.t})`, `ตัด (${u.t})`, 'จำนวน', 'ชั้น / กลุ่ม', 'ชุด', 'ตำแหน่ง', 'น้ำหนัก (กก.)']];
     const dims = s => s.f ? (s.k === 'S' || s.k === 'R' ? [s.w, s.h, s.hook] : s.k === 'C' ? [s.a, s.leg || '', s.leg2 != null ? s.leg2 || '' : s.lip || ''] : s.k === 'L' ? [s.a, s.leg, ''] : [s.a, '', ''])
       : s.code === 'S1' ? [s.w, s.h, s.hook] : [s.straight, s.hookStart || s.hookEnd || 0, s.hookStart && s.hookEnd ? s.hookEnd : ''];
-    rows.forEach((r, i) => { const s = r.shape, d = dims(s).map(x => x === '' ? '' : u.out(x)); out.push([i + 1, s.code, BCL.SHAPE_T[s.code], ...d, r.bar, u.out(r.sum ?? r.length), u.out(r.deduct || 0), u.out(r.length), r.qty, r.member, r.label, +r.weight.toFixed(2)]); });
+    rows.forEach((r, i) => { const s = r.shape, d = dims(s).map(x => x === '' ? '' : u.out(x)); out.push([i + 1, s.code, BCL.SHAPE_T[s.code], ...d, r.bar, u.out(r.sum ?? r.length), u.out(r.deduct || 0), u.out(r.length), r.qty, r.floor, r.member, r.label, +r.weight.toFixed(2)]); });
     return { name: 'ใบตัดเหล็ก', rows: out };
   };
 })(window.BCL);
