@@ -21,6 +21,7 @@
   --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:'IBM Plex Sans Thai',system-ui,-apple-system,'Segoe UI',sans-serif;overscroll-behavior:none}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -125,6 +126,25 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:999px;b
 .pg.drag{opacity:.25}
 .pg.ghost{position:fixed;z-index:50;pointer-events:none;opacity:.95;filter:drop-shadow(0 12px 24px rgba(0,0,0,.5));transition:none}
 .pg.add .th{background:transparent;border:1.5px dashed #3A3E49;color:var(--accent)}
+.pg .chk{position:absolute;right:6px;top:6px;width:30px;height:30px;border-radius:999px;border:2px solid #fff;background:rgba(11,12,16,.55);display:none;align-items:center;justify-content:center;color:var(--accent-ink);pointer-events:none}
+.pg .chk svg.i{width:18px;height:18px;stroke-width:3;opacity:0}
+#export.selecting .pg .chk{display:flex}
+#export.selecting .pg .grip,#export.selecting .pg .del{display:none}
+#export.selecting .pg.picked .chk{background:var(--accent);border-color:var(--accent)}
+#export.selecting .pg.picked .chk svg.i{opacity:1}
+#export.selecting .pg.picked .th{outline:3px solid var(--accent);outline-offset:2px}
+.pg.sheet .th{background:#2A2E38}
+.pg.sheet .th canvas{display:block;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.selbar{position:sticky;top:0;z-index:5;margin:0 16px 12px;padding:12px;border-radius:16px;background:#121419;border:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.spanel{display:flex;flex-direction:column;gap:6px;padding:0 4px 6px}
+.spanel .pv{display:flex;justify-content:center;align-items:center;min-height:200px;padding:10px;border-radius:14px;background:#2A2E38}
+.spanel .pv canvas{box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.spanel .r{display:flex;justify-content:space-between;font-size:14px;margin-top:6px}
+.spanel .note{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.seg2{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg2 button{height:40px;border-radius:12px;border:1px solid var(--line);background:var(--s2);font-size:14px}
+.seg2 button.on{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:600}
+.sheet{max-height:92vh;overflow-y:auto}
 .row{display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:0 16px;border-bottom:1px solid var(--line2);font-size:15px;gap:12px}
 .row:last-child{border-bottom:0}
 .row select{background:transparent;border:0;color:var(--muted);text-align:right;font-size:15px;outline:none;max-width:60%}
@@ -194,6 +214,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:999px;b
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
   <symbol id="i-grip" viewBox="0 0 24 24"><path d="M5 9h14M5 15h14"/><path d="M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5"/></symbol>
+  <symbol id="i-combine" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8v4H8zM8 14h8v3H8z"/></symbol>
   <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
   <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z" fill="currentColor" stroke="none"/></symbol>
 </svg>
@@ -263,7 +284,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:999px;b
   <div class="top">
     <button class="ib" id="cropBack" aria-label="ย้อนกลับ"><svg class="i"><use href="#i-back"/></svg></button>
     <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
-      <h1 class="title" style="font-size:18px">ปรับภาพ</h1><span class="muted" style="font-size:12px" id="cropPos"></span>
+      <h1 class="title" style="font-size:18px">ปรับภาพ</h1><button id="cropPos" style="background:none;border:0;padding:2px 6px;font-size:12px;color:var(--muted)" aria-label="เปลี่ยนชนิดของภาพ"></button>
     </div>
     <button class="btn pri sm" id="cropNext">ถัดไป</button>
   </div>
@@ -296,9 +317,14 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:999px;b
   </div>
   <div class="scroll" style="padding-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 16px 10px">
-      <h2 style="font-size:15px;font-weight:600" id="pgCount"></h2><span class="muted" style="font-size:12px">ลาก ⇕ เพื่อย้าย · แตะรูปเพื่อแก้</span>
+      <h2 style="font-size:15px;font-weight:600" id="pgCount"></h2><button class="pill" id="combineBtn" style="height:34px;display:flex;align-items:center;gap:6px"><svg class="i" style="width:16px;height:16px"><use href="#i-combine"/></svg>รวมเป็นแผ่นเดียว</button>
+    </div>
+    <div class="selbar" id="selBar" hidden>
+      <span id="selHint" class="muted" style="font-size:13px"></span>
+      <div style="display:flex;gap:8px"><button class="btn sm" id="selCancel">ยกเลิก</button><button class="btn pri sm" id="selGo" style="flex:1"></button></div>
     </div>
     <div class="pages" id="pages"></div>
+    <p class="muted" style="font-size:12px;text-align:center;margin:10px 16px 0">ลาก ⇕ เพื่อย้าย · แตะรูปเพื่อแก้ · × เพื่อลบ</p>
     <div class="sec">
       <div style="display:flex;justify-content:space-between;align-items:center"><label for="fname" class="lbl">ชื่อไฟล์</label><span style="font-size:12px;color:var(--accent);display:flex;align-items:center;gap:4px" id="fnameHint"><svg class="i" style="width:12px;height:12px"><use href="#i-spark"/></svg>ตั้งชื่ออัตโนมัติ · แตะเพื่อแก้</span></div>
       <div class="fname"><input id="fname" autocomplete="off"><span class="muted">.pdf</span><button class="ib" style="width:36px;height:36px;border-radius:10px;border:0;background:var(--s2)" id="fnameEdit" aria-label="แก้ไขชื่อไฟล์"><svg class="i" style="width:16px;height:16px"><use href="#i-edit"/></svg></button></div>

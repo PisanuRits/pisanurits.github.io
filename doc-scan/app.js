@@ -1,6 +1,6 @@
 /* Doc Scan — สแกนเอกสารเป็น PDF */
 'use strict';
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -120,6 +120,8 @@ let pages = [];
 let sessionMode = settings.defMode;
 let sessionDocId = null, sessionSaved = false, nameEdited = false;
 let pid = 0;
+let sheets = {}; // sheet id -> { scale: %, orient: 'auto'|'portrait'|'landscape' }
+let sid = 0;
 let chain = Promise.resolve();
 
 function procOpts(p) {
@@ -163,6 +165,10 @@ async function addSource(blob, liveQuad) {
   const p = { id: ++pid, mode: sessionMode, src, quad: null, detected: null, rot: 0, fine: 0, filter: 'auto',
     out: null, outUrl: null, info: null, busy: true, ver: 0, reviewed: false };
   pages.push(p);
+  if (p.mode === 'card') {
+    const prev = pages[pages.length - 2];
+    if (prev && prev.mode === 'card' && !prev.sheet) { const id = newSheet(); prev.sheet = id; p.sheet = id; }
+  }
   updateStack();
   if (settings.autoWarp) {
     try { p.detected = (await detectFor(p)) || liveQuad || null; } catch (e) { p.detected = liveQuad || null; }
@@ -240,7 +246,7 @@ async function saveDraft() {
   if (!draftId) { draftId = 'r' + Date.now(); draftCreated = Date.now(); }
   const rec = { id: draftId, created: draftCreated, updated: Date.now(), name: nameEdited ? $('fname').value : '', nameEdited,
     paper: $('paper').dataset.set ? $('paper').value : '', quality: $('quality').dataset.set ? $('quality').value : '',
-    pages: pages.map((p) => ({ src: p.src, out: p.busy ? null : p.out, outW: p.outW, outH: p.outH, quad: p.quad, detected: p.detected,
+    sheets, pages: pages.map((p) => ({ sheet: p.sheet || null, src: p.src, out: p.busy ? null : p.out, outW: p.outW, outH: p.outH, quad: p.quad, detected: p.detected,
       rot: p.rot, fine: p.fine, filter: p.filter, mode: p.mode, info: p.info, reviewed: p.reviewed })) };
   try { await DB.put(rec, 'drafts'); setDraftStat('saved'); } catch (e) { setDraftStat('error'); }
 }
@@ -254,6 +260,8 @@ function resumeDraft(d) {
   clearSession();
   draftId = d.id; draftCreated = d.created; nameEdited = !!d.nameEdited;
   pages = d.pages.map((x) => Object.assign({}, x, { id: ++pid, outUrl: x.out ? URL.createObjectURL(x.out) : null, busy: false, ver: 0 }));
+  sheets = d.sheets || {};
+  Object.keys(sheets).forEach((k) => { const n = Number(String(k).slice(1)); if (n > sid) sid = n; });
   sessionMode = (pages[0] && pages[0].mode) || settings.defMode;
   if (nameEdited) $('fname').value = d.name;
   if (d.paper) { $('paper').value = d.paper; $('paper').dataset.set = '1'; }
@@ -532,7 +540,7 @@ function setView(v) {
 }
 function renderCropMeta() {
   const p = pages[ci]; if (!p) return;
-  $('cropPos').textContent = 'หน้า ' + (ci + 1) + ' จาก ' + pages.length + ' · ' + MODE_LABEL[p.mode];
+  $('cropPos').textContent = 'หน้า ' + (ci + 1) + ' จาก ' + pages.length + ' · ' + MODE_LABEL[p.mode] + ' ▾';
   $('cropNext').textContent = cropReturn === 'export' ? 'เสร็จ' : (ci < pages.length - 1 ? 'ถัดไป' : 'บันทึก');
   $('busy').style.display = p.busy ? 'block' : 'none';
   if (p.outUrl && $('resultImg').getAttribute('src') !== p.outUrl) $('resultImg').src = p.outUrl;
@@ -649,9 +657,7 @@ function cropNext() {
 
 /* ---------- export ---------- */
 function pdfPageCount() {
-  let n = 0, cards = 0;
-  pages.forEach((p) => { if (p.mode === 'book') n += 2; else if (p.mode === 'card') cards++; else n++; });
-  return n + Math.ceil(cards / 2);
+  return tiles().reduce((n, t) => n + (!t.sheet && t.pages[0].mode === 'book' ? 2 : 1), 0);
 }
 function makeName() {
   const d = new Date(), pad = (v, l) => String(v).padStart(l || 2, '0');
@@ -672,31 +678,153 @@ function openExport() {
   renderPages();
 }
 let estT = 0;
-function pageLabel(p, k) { return (k + 1) + (p.mode === 'book' ? ' · 2 หน้า' : p.mode === 'card' ? ' · บัตร' : ''); }
+function pageLabel(p, k) { return (k + 1) + (p.mode === 'book' ? '–' + (k + 2) + ' · หนังสือ' : p.mode === 'card' ? ' · บัตร' : ''); }
+let selecting = false;
+const selIds = new Set();
+function newSheet() { const id = 's' + (++sid); sheets[id] = { scale: 80, orient: 'auto' }; return id; }
+/* consecutive pages sharing a sheet id form one tile (= one A4 sheet) */
+function tiles() {
+  const out = [];
+  pages.forEach((p) => {
+    const last = out[out.length - 1];
+    if (p.sheet && last && last.sheet === p.sheet) last.pages.push(p);
+    else out.push({ sheet: p.sheet || null, pages: [p] });
+  });
+  out.forEach((t) => { if (t.sheet && t.pages.length < 2) { t.pages[0].sheet = null; t.sheet = null; } });
+  return out;
+}
+function tileKey(t) { return t.sheet || ('p' + t.pages[0].id); }
+function cleanupSheets() {
+  const used = new Set(pages.map((p) => p.sheet).filter(Boolean));
+  Object.keys(sheets).forEach((k) => { if (!used.has(k)) delete sheets[k]; });
+  tiles(); // drops 1-image sheets
+}
+
+/* ----- A4 layout for several images on one sheet (mm) ----- */
+const PAPER_MM = { a4: [210, 297], letter: [215.9, 279.4] };
+function itemDims(p) {
+  const w = p.outW || 1000, h = p.outH || 1414;
+  return { w, h, card: p.mode === 'card' };
+}
+function sheetLayout(ps, cfg, paperKey) {
+  const base = PAPER_MM[paperKey] || PAPER_MM.a4, M = 12, G = 8, n = ps.length;
+  const items = ps.map(itemDims), scale = Math.max(0.2, Math.min(1, (cfg.scale || 80) / 100));
+  const oris = cfg.orient === 'portrait' ? ['p'] : cfg.orient === 'landscape' ? ['l'] : ['p', 'l'];
+  let best = null;
+  oris.forEach((o) => {
+    const pw = o === 'p' ? base[0] : base[1], ph = o === 'p' ? base[1] : base[0];
+    for (let c = 1; c <= n; c++) {
+      const r = Math.ceil(n / c);
+      if ((r - 1) * c >= n) continue;
+      const cw = (pw - 2 * M - (c - 1) * G) / c, ch = (ph - 2 * M - (r - 1) * G) / r;
+      let score = 0;
+      const sizes = items.map((it) => {
+        if (it.card) {
+          let w = 85.6, h = 54; if (it.h > it.w) { w = 54; h = 85.6; }
+          const k = Math.min(1, cw / w, ch / h);
+          return { w: w * k, h: h * k };
+        }
+        const k = Math.min(cw / it.w, ch / it.h);
+        score += it.w * k * it.h * k;
+        return { w: it.w * k * scale, h: it.h * k * scale };
+      });
+      // tie-breaks: all-card sheets prefer portrait, stacked (front above back)
+      score += (o === 'p' ? 1 : 0) + (c === 1 ? 0.5 : 0) - c * 0.01;
+      if (!best || score > best.score + 1e-6) best = { score, pw, ph, c, r, sizes };
+    }
+  });
+  // compact rows, centre everything on the page
+  const { pw, ph, c, r, sizes } = best, rows = [];
+  for (let i = 0; i < r; i++) rows.push(sizes.slice(i * c, i * c + c));
+  const rowH = rows.map((row) => Math.max.apply(null, row.map((z) => z.h)));
+  const totalH = rowH.reduce((a, b) => a + b, 0) + G * (r - 1);
+  let y = (ph - totalH) / 2;
+  const rects = [];
+  rows.forEach((row, ri) => {
+    const rw = row.reduce((a, z) => a + z.w, 0) + G * (row.length - 1);
+    let x = (pw - rw) / 2;
+    row.forEach((z) => { rects.push({ x, y: y + (rowH[ri] - z.h) / 2, w: z.w, h: z.h }); x += z.w + G; });
+    y += rowH[ri] + G;
+  });
+  return { pw, ph, rects };
+}
+const thumbCache = new Map();
+function pageThumb(p) {
+  if (!p.out) return Promise.resolve(null);
+  const hit = thumbCache.get(p.id);
+  if (hit && hit.key === p.outUrl) return hit.pr;
+  const pr = decode(p.out).then((im) => { const c = drawScaled(im, 700); if (im.close) im.close(); return c; });
+  thumbCache.set(p.id, { key: p.outUrl, pr });
+  return pr;
+}
+async function drawSheet(canvas, ps, cfg, cssW) {
+  const L = sheetLayout(ps, cfg, $('paper').value === 'letter' ? 'letter' : 'a4');
+  const dpr = window.devicePixelRatio || 1;
+  const kk = Math.min(cssW / L.pw, (canvas.dataset.maxh ? Number(canvas.dataset.maxh) : 1e9) / L.ph);
+  canvas.width = Math.round(L.pw * kk * dpr); canvas.height = Math.round(L.ph * kk * dpr);
+  canvas.style.width = (L.pw * kk) + 'px'; canvas.style.height = (L.ph * kk) + 'px';
+  const x = canvas.getContext('2d'); x.setTransform(dpr * kk, 0, 0, dpr * kk, 0, 0);
+  x.fillStyle = '#fff'; x.fillRect(0, 0, L.pw, L.ph);
+  const ims = await Promise.all(ps.map(pageThumb));
+  L.rects.forEach((r, i) => {
+    if (ims[i]) x.drawImage(ims[i], r.x, r.y, r.w, r.h);
+    else { x.fillStyle = '#e5e7eb'; x.fillRect(r.x, r.y, r.w, r.h); }
+    x.strokeStyle = 'rgba(0,0,0,.18)'; x.lineWidth = 0.4; x.strokeRect(r.x, r.y, r.w, r.h);
+  });
+}
+
 function renderPages() {
   const box = $('pages'); box.innerHTML = '';
+  cleanupSheets();
+  const ts = tiles();
   $('pgCount').textContent = pdfPageCount() + ' หน้า';
-  pages.forEach((p, i) => {
-    const el = document.createElement('div'); el.className = 'pg'; el.dataset.id = p.id;
+  $('export').classList.toggle('selecting', selecting);
+  let pageNo = 0;
+  ts.forEach((t) => {
+    const key = tileKey(t), isSheet = !!t.sheet, p0 = t.pages[0];
+    const el = document.createElement('div'); el.className = 'pg' + (isSheet ? ' sheet' : ''); el.dataset.key = key;
     el.innerHTML = '<button class="th" type="button"></button><span class="lb"></span>' +
-      '<button class="grip" type="button" aria-label="ลากเพื่อย้ายหน้า"><svg class="i"><use href="#i-grip"/></svg></button>' +
-      '<button class="del" type="button" aria-label="ลบหน้า"><svg class="i"><use href="#i-x"/></svg></button>';
+      '<button class="grip" type="button" aria-label="ลากเพื่อย้าย"><svg class="i"><use href="#i-grip"/></svg></button>' +
+      '<button class="del" type="button" aria-label="ลบ"><svg class="i"><use href="#i-x"/></svg></button>' +
+      '<span class="chk" aria-hidden="true"><svg class="i"><use href="#i-check"/></svg></span>';
     const th = el.querySelector('.th');
-    th.setAttribute('aria-label', 'หน้า ' + (i + 1) + ' แตะเพื่อแก้ไข');
-    if (p.outUrl) { const im = document.createElement('img'); im.src = p.outUrl; im.alt = ''; th.appendChild(im); }
-    if (p.busy || !p.outUrl) { const sp = document.createElement('i'); sp.className = 'spin'; th.appendChild(sp); }
-    el.querySelector('.lb').textContent = pageLabel(p, i);
-    th.addEventListener('click', () => pageSheet(pages.indexOf(p)));
-    el.querySelector('.del').addEventListener('click', () => removePage(p));
+    const first = pageNo + 1;
+    pageNo += !isSheet && p0.mode === 'book' ? 2 : 1;
+    if (isSheet) {
+      const cv = document.createElement('canvas'); th.appendChild(cv);
+      requestAnimationFrame(() => { cv.dataset.maxh = String(th.clientHeight - 8); drawSheet(cv, t.pages, sheets[t.sheet], th.clientWidth - 8); });
+      el.querySelector('.lb').textContent = first + ' · รวม ' + t.pages.length + ' ภาพ';
+      th.setAttribute('aria-label', 'แผ่นรวม ' + t.pages.length + ' ภาพ แตะเพื่อปรับ');
+    } else {
+      if (p0.outUrl) { const im = document.createElement('img'); im.src = p0.outUrl; im.alt = ''; th.appendChild(im); }
+      el.querySelector('.lb').textContent = pageLabel(p0, first - 1);
+      th.setAttribute('aria-label', 'หน้า ' + first + ' แตะเพื่อแก้ไข');
+    }
+    if (t.pages.some((p) => p.busy || !p.outUrl)) { const sp = document.createElement('i'); sp.className = 'spin'; th.appendChild(sp); }
+    const sel = t.pages.every((p) => selIds.has(p.id));
+    el.classList.toggle('picked', selecting && sel);
+    th.addEventListener('click', () => {
+      if (selecting) { t.pages.forEach((p) => (sel ? selIds.delete(p.id) : selIds.add(p.id))); renderPages(); return; }
+      if (isSheet) sheetPanel(t.sheet); else pageSheet(pages.indexOf(p0));
+    });
+    el.querySelector('.del').addEventListener('click', () => removeTile(t));
     el.querySelector('.grip').addEventListener('pointerdown', (e) => startPageDrag(e, el));
     box.appendChild(el);
   });
-  const add = document.createElement('div'); add.className = 'pg add';
-  add.innerHTML = '<button class="th" type="button" aria-label="เพิ่มหน้า"><svg class="i" style="width:22px;height:22px"><use href="#i-plus"/></svg></button><span class="lb">เพิ่มหน้า</span>';
-  add.querySelector('.th').onclick = () => openSheet('เพิ่มหน้า', [
-    { label: 'ถ่ายรูป', icon: 'i-scan', on: () => openCamera() },
-    { label: 'นำเข้ารูป', icon: 'i-image', on: () => $('filePick').click() }]);
-  box.appendChild(add);
+  if (!selecting) {
+    const add = document.createElement('div'); add.className = 'pg add';
+    add.innerHTML = '<button class="th" type="button" aria-label="เพิ่มหน้า"><svg class="i" style="width:22px;height:22px"><use href="#i-plus"/></svg></button><span class="lb">เพิ่มหน้า</span>';
+    add.querySelector('.th').onclick = () => openSheet('เพิ่มหน้า', [
+      { label: 'ถ่ายรูป', icon: 'i-scan', on: () => openCamera() },
+      { label: 'นำเข้ารูป', icon: 'i-image', on: () => $('filePick').click() }]);
+    box.appendChild(add);
+  }
+  const nSel = selIds.size;
+  $('selBar').hidden = !selecting;
+  $('combineBtn').hidden = selecting || pages.length < 2;
+  $('selGo').disabled = nSel < 2 || nSel > 6;
+  $('selGo').textContent = nSel > 6 ? 'รวมได้สูงสุด 6 ภาพ' : 'รวม ' + nSel + ' ภาพเป็นแผ่นเดียว';
+  $('selHint').textContent = nSel < 2 ? 'แตะเลือกภาพที่จะรวมอย่างน้อย 2 ภาพ' : 'เลือกแล้ว ' + nSel + ' ภาพ';
   clearTimeout(estT); estT = setTimeout(updateEstimate, 150);
 }
 function updateEstimate() {
@@ -704,40 +832,111 @@ function updateEstimate() {
   let tot = 0, ready = true;
   pages.forEach((p) => {
     if (!p.out) { ready = false; return; }
-    const r = Math.min(1, Q.side / Math.max(p.outW, p.outH));
+    const r = Math.min(1, Q.side / Math.max(p.outW, p.outH)) * (p.sheet ? 0.6 : 1);
     tot += p.out.size * r * r * Q.f;
   });
   $('estSize').textContent = !pages.length ? '—' : ready ? '~' + fmtSize(tot + 4000) : 'กำลังคำนวณ…';
 }
-function removePage(p) {
-  const i = pages.indexOf(p); if (i < 0) return;
-  pages.splice(i, 1); sessionSaved = false;
+function snapshot() { return { pages: pages.slice(), sheets: JSON.parse(JSON.stringify(sheets)), sh: pages.map((p) => p.sheet || null) }; }
+function restore(sn) { pages = sn.pages; sheets = sn.sheets; pages.forEach((p, i) => { p.sheet = sn.sh[i]; }); sessionSaved = false; renderPages(); scheduleDraft(); }
+function removeTile(t) {
+  const sn = snapshot();
+  const i = pages.indexOf(t.pages[0]);
+  pages = pages.filter((p) => !t.pages.includes(p)); sessionSaved = false;
+  if (!pages.length) { renderPages(); }
   renderPages(); scheduleDraft();
-  toast('ลบหน้า ' + (i + 1) + ' แล้ว', 5000, { label: 'เลิกทำ', on: () => { pages.splice(Math.min(i, pages.length), 0, p); sessionSaved = false; renderPages(); scheduleDraft(); } });
+  toast((t.sheet ? 'ลบแผ่นรวมแล้ว' : 'ลบหน้า ' + (i + 1) + ' แล้ว'), 5000, { label: 'เลิกทำ', on: () => restore(sn) });
 }
+const MODE_HELP = { doc: 'ใช้สัดส่วนจริงของภาพ', card: 'ขนาดบัตรจริง 85.6 × 54 มม.', book: 'ตัดครึ่งเป็น 2 หน้า' };
+function chooseMode(p, after) {
+  openSheet('ชนิดของภาพนี้', ['doc', 'card', 'book'].map((m) => ({
+    label: MODE_LABEL[m] + ' — ' + MODE_HELP[m] + (p.mode === m ? '  ✓' : ''), pri: p.mode === m,
+    on: () => { if (p.mode !== m) { p.mode = m; processPage(p); } if (after) after(); } })));
+}
+function removePage(p) { removeTile({ sheet: null, pages: [p] }); }
 function movePage(p, delta) {
-  const i = pages.indexOf(p), j = i + delta;
-  if (i < 0 || j < 0 || j >= pages.length) return;
-  pages.splice(i, 1); pages.splice(j, 0, p); sessionSaved = false;
+  const ts = tiles(), ti = ts.findIndex((t) => t.pages.includes(p)), tj = ti + delta;
+  if (ti < 0 || tj < 0 || tj >= ts.length) return;
+  const [m] = ts.splice(ti, 1); ts.splice(tj, 0, m);
+  pages = [].concat.apply([], ts.map((t) => t.pages)); sessionSaved = false;
   renderPages(); scheduleDraft();
+}
+function combine(ids) {
+  const chosen = pages.filter((p) => ids.has(p.id));
+  if (chosen.length < 2) return;
+  const sn = snapshot();
+  const at = pages.indexOf(chosen[0]);
+  const rest = pages.filter((p) => !ids.has(p.id));
+  const insertAt = rest.filter((p) => pages.indexOf(p) < at).length;
+  const id = newSheet();
+  chosen.forEach((p) => { p.sheet = id; });
+  rest.splice(insertAt, 0, ...chosen);
+  pages = rest; sessionSaved = false;
+  selecting = false; selIds.clear();
+  renderPages(); scheduleDraft();
+  toast('รวม ' + chosen.length + ' ภาพเป็นแผ่นเดียวแล้ว', 4000, { label: 'เลิกทำ', on: () => restore(sn) });
+}
+function splitSheet(id) {
+  const sn = snapshot();
+  pages.forEach((p) => { if (p.sheet === id) p.sheet = null; });
+  delete sheets[id]; sessionSaved = false;
+  renderPages(); scheduleDraft();
+  toast('แยกภาพออกจากกันแล้ว', 4000, { label: 'เลิกทำ', on: () => restore(sn) });
 }
 function pageSheet(i) {
   const p = pages[i]; if (!p) return;
+  const ts = tiles(), ti = ts.findIndex((t) => t.pages.includes(p));
   const items = [
     { label: 'แก้ไข / ปรับภาพ', icon: 'i-edit', on: () => { cropReturn = 'export'; openCrop(pages.indexOf(p)); } },
-    { label: 'หมุน 90°', icon: 'i-rot', on: () => { p.rot = (p.rot + 90) % 360; processPage(p); } }];
-  if (i > 0) items.push({ label: 'เลื่อนไปก่อนหน้า', icon: 'i-back', on: () => movePage(p, -1) });
-  if (i < pages.length - 1) items.push({ label: 'เลื่อนไปถัดไป', icon: 'i-fwd', on: () => movePage(p, 1) });
+    { label: 'หมุน 90°', icon: 'i-rot', on: () => { p.rot = (p.rot + 90) % 360; processPage(p); } },
+    { label: 'ชนิด: ' + MODE_LABEL[p.mode] + ' (เปลี่ยน)', icon: 'i-doc', on: () => chooseMode(p, renderPages) }];
+  if (ti < ts.length - 1) items.push({ label: 'รวมกับหน้าถัดไปเป็นแผ่นเดียว', icon: 'i-combine', on: () => combine(new Set([p.id].concat(ts[ti + 1].pages.map((q) => q.id)))) });
+  if (ti > 0) items.push({ label: 'เลื่อนไปก่อนหน้า', icon: 'i-back', on: () => movePage(p, -1) });
+  if (ti < ts.length - 1) items.push({ label: 'เลื่อนไปถัดไป', icon: 'i-fwd', on: () => movePage(p, 1) });
   items.push({ label: 'ลบหน้านี้', icon: 'i-trash', danger: true, on: () => removePage(p) });
-  openSheet('หน้า ' + (i + 1) + ' จาก ' + pages.length, items);
+  openSheet('หน้า ' + (ti + 1) + ' จาก ' + ts.length, items);
 }
-/* Drag to reorder: starts instantly from the grip; neighbours slide out of the way (FLIP). */
+/* Panel for a combined sheet: live A4 preview, size %, paper orientation */
+function sheetPanel(id) {
+  const cfg = sheets[id]; if (!cfg) return;
+  const ps = () => pages.filter((p) => p.sheet === id);
+  const wrap = document.createElement('div'); wrap.className = 'spanel';
+  wrap.innerHTML = '<div class="pv"><canvas></canvas></div>' +
+    '<div class="r"><label for="spScale">ขนาดภาพ</label><b id="spVal"></b></div>' +
+    '<input type="range" id="spScale" min="30" max="100" step="5">' +
+    '<div class="r" style="margin-top:4px"><span>แนวกระดาษ</span></div>' +
+    '<div class="seg2" role="group" aria-label="แนวกระดาษ"><button data-o="auto">อัตโนมัติ</button><button data-o="portrait">แนวตั้ง</button><button data-o="landscape">แนวนอน</button></div>' +
+    '<p class="note"></p>';
+  const cv = wrap.querySelector('canvas'), rng = wrap.querySelector('#spScale');
+  rng.value = cfg.scale;
+  const hasCard = ps().some((p) => p.mode === 'card'), allCard = ps().every((p) => p.mode === 'card');
+  wrap.querySelector('.note').textContent = allCard ? 'บัตรใช้ขนาดเท่าของจริง (85.6 × 54 มม.)' : hasCard ? 'บัตรคงขนาดจริง ภาพอื่นปรับตาม %' : '100% = ใหญ่สุดเท่าที่พอดีพื้นที่';
+  if (allCard) { rng.disabled = true; }
+  const redraw = () => {
+    wrap.querySelector('#spVal').textContent = allCard ? 'ขนาดจริง' : cfg.scale + '%';
+    wrap.querySelectorAll('.seg2 button').forEach((b) => b.classList.toggle('on', b.dataset.o === cfg.orient));
+    cv.dataset.maxh = '260'; drawSheet(cv, ps(), cfg, Math.min(300, wrap.clientWidth || 300));
+  };
+  rng.addEventListener('input', () => { cfg.scale = Number(rng.value); redraw(); sessionSaved = false; scheduleDraft(); });
+  rng.addEventListener('change', () => renderPages());
+  wrap.querySelectorAll('.seg2 button').forEach((b) => { b.onclick = () => { cfg.orient = b.dataset.o; redraw(); renderPages(); sessionSaved = false; scheduleDraft(); }; });
+  const edits = ps().map((p, k) => ({ label: 'แก้ไขภาพที่ ' + (k + 1), icon: 'i-edit', on: () => { cropReturn = 'export'; openCrop(pages.indexOf(p)); } }));
+  openSheet('แผ่นรวม · ' + ps().length + ' ภาพ', [{ el: wrap }].concat(edits, [
+    { label: 'แยกภาพออกจากกัน', icon: 'i-combine', on: () => splitSheet(id) },
+    { label: 'ลบทั้งแผ่น', icon: 'i-trash', danger: true, on: () => removeTile({ sheet: id, pages: ps() }) },
+    { label: 'เสร็จ', pri: true, on: () => renderPages() }]));
+  requestAnimationFrame(redraw);
+}
+/* Drag to reorder tiles: starts instantly from the grip; neighbours slide out of the way (FLIP). */
 function startPageDrag(e, el) {
+  if (selecting) return;
   e.preventDefault(); e.stopPropagation();
   const box = $('pages'), scroller = box.closest('.scroll');
-  const items = () => Array.from(box.querySelectorAll('.pg[data-id]'));
+  const items = () => Array.from(box.querySelectorAll('.pg[data-key]'));
   const r = el.getBoundingClientRect(), offX = e.clientX - r.left, offY = e.clientY - r.top;
   const ghost = el.cloneNode(true); ghost.classList.add('ghost');
+  const gc = ghost.querySelector('canvas'), oc = el.querySelector('canvas');
+  if (gc && oc) { gc.width = oc.width; gc.height = oc.height; gc.getContext('2d').drawImage(oc, 0, 0); }
   ghost.style.width = r.width + 'px'; ghost.style.left = '0px'; ghost.style.top = '0px';
   document.body.appendChild(ghost);
   el.classList.add('drag');
@@ -776,10 +975,10 @@ function startPageDrag(e, el) {
     cancelAnimationFrame(scrollT);
     window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end);
     ghost.remove(); el.classList.remove('drag');
-    const order = items().map((n) => Number(n.dataset.id));
-    const before = pages.map((p) => p.id).join();
-    pages.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-    if (pages.map((p) => p.id).join() !== before) { sessionSaved = false; scheduleDraft(); }
+    const order = items().map((n) => n.dataset.key);
+    const ts = tiles(), before = ts.map(tileKey).join();
+    ts.sort((a, b) => order.indexOf(tileKey(a)) - order.indexOf(tileKey(b)));
+    if (ts.map(tileKey).join() !== before) { pages = [].concat.apply([], ts.map((t) => t.pages)); sessionSaved = false; scheduleDraft(); }
     renderPages();
   };
   // listen on window: moving the tile in the DOM drops any pointer capture on the grip
@@ -821,25 +1020,23 @@ async function buildPdf() {
     const k = Math.min(pw / j.w, ph / j.h), iw = j.w * k, ih = j.h * k;
     doc.addImage(j.bytes, 'JPEG', (pw - iw) / 2, (ph - ih) / 2, iw, ih, undefined, 'NONE');
   };
-  let cardBuf = [];
-  const flushCards = async () => {
-    if (!cardBuf.length) return;
-    const s = paper === 'letter' ? SIZES.letter : SIZES.a4;
-    newPage(s[0], s[1]);
-    const cw = 85.6, chh = 54, x = (s[0] - cw) / 2;
-    for (let k = 0; k < cardBuf.length; k++) {
-      const j = await jpegBytes(cardBuf[k].out, 1200, Math.max(Q.q, 0.85));
-      doc.addImage(j.bytes, 'JPEG', x, 40 + k * (chh + 22), cw, chh, undefined, 'NONE');
+  for (const t of tiles()) {
+    const p0 = t.pages[0];
+    if (!t.sheet && p0.mode !== 'card') {
+      if (p0.mode === 'book') { await placeImage(p0.out, 'L'); await placeImage(p0.out, 'R'); }
+      else await placeImage(p0.out);
+      continue;
     }
-    cardBuf = [];
-  };
-  for (const p of pages) {
-    if (p.mode === 'card') { cardBuf.push(p); if (cardBuf.length === 2) await flushCards(); continue; }
-    await flushCards();
-    if (p.mode === 'book') { await placeImage(p.out, 'L'); await placeImage(p.out, 'R'); }
-    else await placeImage(p.out);
+    // combined sheet (or a lone ID card at real size)
+    const cfg = t.sheet ? sheets[t.sheet] : { scale: 100, orient: 'portrait' };
+    const L = sheetLayout(t.pages, cfg, paper === 'letter' ? 'letter' : 'a4');
+    newPage(L.pw, L.ph);
+    for (let k = 0; k < t.pages.length; k++) {
+      const r = L.rects[k], side = Math.round(Math.max(600, Math.min(Q.side, Q.side * Math.max(r.w, r.h) / 250)));
+      const j = await jpegBytes(t.pages[k].out, side, t.pages[k].mode === 'card' ? Math.max(Q.q, 0.85) : Q.q);
+      doc.addImage(j.bytes, 'JPEG', r.x, r.y, r.w, r.h, undefined, 'NONE');
+    }
   }
-  await flushCards();
   return doc.output('blob');
 }
 function downloadBlob(blob, name) {
@@ -893,7 +1090,7 @@ async function doExport(via) {
 function clearSession() {
   clearTimeout(draftT);
   pages.forEach((p) => p.outUrl && URL.revokeObjectURL(p.outUrl));
-  pages = []; sessionDocId = null; sessionSaved = false; nameEdited = false; dispFor = null;
+  pages = []; sheets = {}; sessionDocId = null; sessionSaved = false; nameEdited = false; dispFor = null; selecting = false; selIds.clear();
   draftId = null; draftCreated = 0;
   $('paper').dataset.set = ''; $('quality').dataset.set = '';
 }
@@ -974,6 +1171,7 @@ document.querySelectorAll('#modes button').forEach((b) => {
   b.onclick = () => { if (b.dataset.m === 'import') $('filePick').click(); else setMode(b.dataset.m); };
 });
 $('cropBack').onclick = cropBack;
+$('cropPos').onclick = () => { const p = pages[ci]; if (p) chooseMode(p, renderCropMeta); };
 $('cropNext').onclick = cropNext;
 $('vEdge').onclick = () => setView('edge');
 $('vRes').onclick = () => setView('res');
@@ -1006,6 +1204,9 @@ $('fname').addEventListener('input', () => { nameEdited = true; scheduleDraft();
 $('fnameEdit').onclick = () => { const f = $('fname'); f.focus(); f.select(); };
 $('paper').addEventListener('change', () => { $('paper').dataset.set = '1'; scheduleDraft(); });
 $('quality').addEventListener('change', () => { $('quality').dataset.set = '1'; updateEstimate(); scheduleDraft(); });
+$('combineBtn').onclick = () => { selecting = true; selIds.clear(); renderPages(); };
+$('selCancel').onclick = () => { selecting = false; selIds.clear(); renderPages(); };
+$('selGo').onclick = () => combine(new Set(selIds));
 $('doDownload').onclick = () => doExport('download');
 $('doShare').onclick = () => doExport('share');
 $('doDrive').onclick = () => doExport('drive');
