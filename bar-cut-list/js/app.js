@@ -52,7 +52,7 @@
       BCL.renderOverlays($('#overlays'), state, G, L);
       BCL.renderTable($('#tbl'), state, G, L);
       $('#spanCount').value = state.beam.spans.length;
-      $('#beamName').value = state.beam.name; renderFloorSel();
+      $('#beamName').value = state.beam.name; renderFloorSel(); updateIdent();
       $('#btnPasteAll').disabled = !BCL.hasClipboard();
       BCL.bindInputs($('#editor'), state, onModelChange);
     } else {
@@ -82,22 +82,38 @@
   function loadMember(i) {
     const m = state.members[i];
     if (m.type === 'footing') {
-      if (!confirm(`ดึง "${m.name}" กลับมาแก้ — ฐานที่กำลังแก้อยู่ (${state.footing.name}) จะถูกแทนที่ และ "${m.name}" จะออกจากรายการจนกว่าจะส่งใหม่ ดำเนินการ?`)) return;
-      state.footing = BCL.clone(m.data); state.members.splice(i, 1); BCL.save(state); showPage('footing'); return;
+      // โหมดแก้ไข: ชุดเดิมยังอยู่ในรายการ · ฐานที่ร่างค้างไว้ถูกพักไว้ แล้วคืนให้ตอนออก
+      if (state.footingEdit && state.footingEdit.sentAt !== m.sentAt) endFootingEdit();
+      if (!state.footingEdit) state.footingEdit = { sentAt: m.sentAt, draft: BCL.clone(state.footing) };
+      state.footing = BCL.clone(m.data); BCL.save(state); showPage('footing'); return;
     }
     if (!confirm(`ดึง "${m.name}" กลับมาแก้ — ชุดคานที่กำลังแก้อยู่ (${state.beam.name}) จะถูกแทนที่ และ "${m.name}" จะออกจากรายการจนกว่าจะส่งใหม่ ดำเนินการ?`)) return;
     state.beam = BCL.clone(m.data); state.members.splice(i, 1); BCL.save(state); showPage('beam');
   }
   function delMember(i) {
     if (!confirm(`ลบ "${state.members[i].name}" ออกจากรายการ?`)) return;
+    if (state.footingEdit && state.members[i].sentAt === state.footingEdit.sentAt) endFootingEdit();
     state.members.splice(i, 1); BCL.save(state); if (page === 'home') renderHome(); else renderMembers();
   }
   /* ---------- ฐานราก ---------- */
+  const editIdx = () => state.footingEdit ? state.members.findIndex(m => m.type === 'footing' && m.sentAt === state.footingEdit.sentAt) : -1;
+  function endFootingEdit() { if (!state.footingEdit) return; state.footing = state.footingEdit.draft || BCL.defaultFooting(); delete state.footingEdit; }
+  const footingRows = (c, n) => c.rows.map(r => ({ key: r.key, label: r.label, note: r.note, bar: r.bar, shape: BCL.clone(r.shape), perFooting: r.qty, qty: r.qty * n, length: r.cut }));
   const footingHooks = {
     change: () => updateCrumb(),
+    editing: () => { const i = editIdx(); if (i < 0 && state.footingEdit) { endFootingEdit(); BCL.save(state); } return i >= 0 ? state.members[i] : null; },
+    cancel: () => { endFootingEdit(); BCL.save(state); showPage('home'); },
+    saveEdit: c => {   // บันทึกทับชุดเดิม (ตำแหน่ง/การเลือกเดิม) แล้วกลับหน้ารวม
+      const i = editIdx(); if (i < 0) return;
+      const f = state.footing, name = f.name || 'F', n = Math.max(1, f.count | 0), old = state.members[i];
+      const dup = state.members.findIndex((m, j) => j !== i && m.type === 'footing' && m.name === name);
+      if (dup >= 0 && !confirm(`มีฐานชื่อ "${name}" อีกชุดอยู่แล้ว — บันทึกชื่อซ้ำ?`)) return;
+      state.members[i] = { ...old, name, data: BCL.clone(f), rows: footingRows(c, n), editedAt: Date.now() };
+      endFootingEdit(); BCL.save(state); showPage('home');
+    },
     send: c => {
       const f = state.footing, name = f.name || 'F', n = Math.max(1, f.count | 0);
-      const rows = c.rows.map(r => ({ key: r.key, label: r.label, note: r.note, bar: r.bar, shape: BCL.clone(r.shape), perFooting: r.qty, qty: r.qty * n, length: r.cut }));
+      const rows = footingRows(c, n);
       const member = { type: 'footing', name, sentAt: Date.now(), data: BCL.clone(f), rows };
       const idx = state.members.findIndex(m => m.name === name && m.type === 'footing');
       if (idx >= 0) { if (!confirm(`มีฐานชื่อ "${name}" อยู่แล้ว — แทนที่?`)) return; state.members[idx] = member; } else state.members.push(member);
@@ -133,6 +149,7 @@
   function onModelChange(el, light) { if (state.beam.schedule) state.beam.schedule.stale = true; BCL.save(state); render(!!light); }
 
   $('#spanCount').addEventListener('change', e => { BCL.setSpanCount(state, +e.target.value); onModelChange(); });
+  function updateIdent() { const el = $('#beamIdent'); if (el) el.textContent = [state.beam.floor, state.beam.name].filter(Boolean).join(' · '); }
   function renderFloorSel() {
     const fl = state.project.floors || (state.project.floors = []), cur = state.beam.floor || '';
     if (cur && !fl.includes(cur)) fl.push(cur);
@@ -141,9 +158,9 @@
   $('#beamFloor').addEventListener('change', e => {
     let v = e.target.value;
     if (v === '__add') { v = (prompt('ชื่อชั้นใหม่ (เช่น ชั้น 3, ชั้นลอย, หลังคา)') || '').trim(); if (!v) { renderFloorSel(); return; } if (!state.project.floors.includes(v)) state.project.floors.push(v); }
-    state.beam.floor = v; BCL.save(state); renderFloorSel(); updateCrumb();
+    state.beam.floor = v; BCL.save(state); renderFloorSel(); updateCrumb(); updateIdent();
   });
-  $('#beamName').addEventListener('input', e => { state.beam.name = e.target.value || 'B'; onModelChange(e.target, true); });
+  $('#beamName').addEventListener('input', e => { state.beam.name = e.target.value || 'B'; updateIdent(); updateCrumb(); onModelChange(e.target, true); });
   $('#beamName').addEventListener('change', () => onModelChange());
   $('#btnPasteAll').addEventListener('click', () => { if (BCL.pasteAll(state)) onModelChange(); });
   $('#btnReset').addEventListener('click', () => {
@@ -169,7 +186,7 @@
   const CLS = { home: 'tab-home', footing: 'tab-footing', beam: 'tab-model', summary: 'tab-summary', cutsheet: 'tab-cutsheet' };
   function updateCrumb() {
     const home = '<a data-p="home">หน้ารวม</a>';
-    $('#crumb').innerHTML = page === 'home' ? '' : page === 'footing' ? `${home} › ฐานราก › <b>${state.footing.name}</b>` : page === 'beam' ? `${home} › คาน › <b>${[state.beam.floor, state.beam.name].filter(Boolean).join(' · ')}</b>` : `${home} › ${page === 'summary' ? 'สรุป & แผนตัด' : 'ใบตัดเหล็ก'}`;
+    $('#crumb').innerHTML = page === 'home' ? '' : page === 'footing' ? `${home} › ฐานราก › ${state.footingEdit ? '<span class="editbadge">แก้ไข</span> ' : ''}<b>${state.footing.name}</b>` : page === 'beam' ? `${home} › คาน › <b>${[state.beam.floor, state.beam.name].filter(Boolean).join(' · ')}</b>` : `${home} › ${page === 'summary' ? 'สรุป & แผนตัด' : 'ใบตัดเหล็ก'}`;
     $('#crumb').querySelectorAll('[data-p]').forEach(a => a.onclick = () => showPage(a.dataset.p));
   }
   function showPage(p, keepScroll) {

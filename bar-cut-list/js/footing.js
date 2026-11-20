@@ -318,8 +318,8 @@
 
   /* ---------- หน้าฐานราก ---------- */
   BCL.renderFooting = function (root, state, hooks) {
-    const f = state.footing;
-    root.innerHTML = `<div class="fwrap">
+    const f = state.footing, editing = hooks.editing ? hooks.editing() : null;
+    root.innerHTML = `${editing ? `<div class="editbar">✎ กำลังแก้ไข <b>${editing.name}</b> ที่ส่งไปแล้ว — กด <b>บันทึกและออก</b> เพื่อบันทึกทับชุดเดิม หรือ <b>ยกเลิก</b> เพื่อออกโดยไม่บันทึก</div>` : ''}<div class="fwrap">
       <div class="fleft" id="fPanel">${panelHTML(state)}</div>
       <div class="fright">
         <div class="fdraw">
@@ -333,7 +333,7 @@
           <div class="tw"><table class="bs" id="fBs"></table></div>
           <div class="fbtns"><span id="fMsg" class="fmsg"></span><span class="spacer"></span>
             <button id="fRestore" title="คืนระยะทุกรายการเป็นค่าที่โปรแกรมคำนวณ">↺ คืนค่าคำนวณทั้งหมด</button>
-            <button id="fSend" class="primary">ส่งไป Bar Cut List →</button></div>
+            ${editing ? `<button id="fCancel">ยกเลิก</button><button id="fSend" class="primary">บันทึกและออก</button>` : `<button id="fSend" class="primary">ส่งไป Bar Cut List →</button>`}</div>
         </div>
       </div></div>`;
     const panel = root.querySelector('#fPanel');
@@ -370,7 +370,8 @@
     }));
     panel.querySelector('#fUnit').addEventListener('change', e => { state.project.units = e.target.value; BCL.save(state); BCL.renderFooting(root, state, hooks); hooks.change(); });
     root.querySelector('#fRestore').addEventListener('click', () => { f.ovr = {}; BCL.save(state); refresh(); });
-    root.querySelector('#fSend').addEventListener('click', () => hooks.send(BCL.footingCalc(state)));
+    root.querySelector('#fSend').addEventListener('click', () => editing ? hooks.saveEdit(BCL.footingCalc(state)) : hooks.send(BCL.footingCalc(state)));
+    if (editing) root.querySelector('#fCancel').addEventListener('click', () => { if (confirm('ออกโดยไม่บันทึกการแก้ไข?')) hooks.cancel(); });
 
     function refresh() {
       const c = BCL.footingCalc(state), m = u.out;

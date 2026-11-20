@@ -41,7 +41,7 @@
           ${BCL.groupOrder(state).map(g => { const idx = BCL.memberOrder(state).filter(i => BCL.memberGroup(ms[i]) === g), allOn = idx.every(i => BCL.isSel(ms[i]));
             const gkg = idx.reduce((a, i) => a + byMember(i), 0);
             return `<tr class="grp"><td><input type="checkbox" data-gsel="${g.replace(/"/g, '&quot;')}" ${allOn ? 'checked' : ''} title="เลือก/ยกเลิกทั้งกลุ่ม"></td><td colspan="6">${g} <span class="cnt">${idx.length} ชุด · ${fmt(gkg)} กก.</span></td></tr>` +
-            idx.map(i => { const m = ms[i]; return `<tr class="${BCL.isSel(m) ? '' : 'unsel'}"><td><input type="checkbox" data-msel="${i}" ${BCL.isSel(m) ? 'checked' : ''}></td><td><span class="tag ${TAG[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span></td><td><b>${m.name}</b></td><td class="l">${BCL.memberDesc(m, state)}</td>
+            idx.map(i => { const m = ms[i]; return `<tr class="${BCL.isSel(m) ? '' : 'unsel'}"><td><input type="checkbox" data-msel="${i}" ${BCL.isSel(m) ? 'checked' : ''}></td><td><span class="tag ${TAG[m.type] || ''}">${BCL.TYPE_T[m.type] || m.type}</span></td><td><b>${m.name}</b>${state.footingEdit && state.footingEdit.sentAt === m.sentAt ? ' <span class="editbadge">กำลังแก้</span>' : ''}</td><td class="l">${BCL.memberDesc(m, state)}</td>
             <td>${m.type === 'footing' ? `${m.data.count} ฐาน` : '1 ชุด'}</td><td>${fmt(byMember(i))}</td>
             <td><button data-mload="${i}" title="ดึงกลับมาแก้">✎</button> <button data-mdel="${i}" title="ลบออกจากรายการ">✕</button></td></tr>`; }).join(''); }).join('')}</table>`
         : `<p class="empty">ยังไม่มีชิ้นส่วน — เลือกประเภทด้านบนเพื่อเริ่ม แล้วกด "ส่งไป Bar Cut List →"</p>`}

@@ -13,12 +13,7 @@
   <h1 id="logo" title="หน้ารวม">Bar Cut List</h1>
   <span class="crumb" id="crumb"></span>
   <nav class="tabs"><button class="tab" data-page="home">หน้ารวม</button><button class="tab" data-page="summary">สรุป & แผนตัด</button><button class="tab" data-page="cutsheet">ใบตัดเหล็ก</button></nav>
-  <div class="ctl only-model">ชั้น <select id="beamFloor" title="ชั้นของคานชุดนี้ (ใช้จัดกลุ่มในหน้ารวม / ใบตัด)"></select></div>
-  <div class="ctl only-model">ชุดคาน <input type="text" id="beamName" value="B1" title="ตั้งชื่อเองได้อิสระ เช่น B1 แนว A, คานซอยห้องน้ำ"></div>
-  <div class="ctl only-model">จำนวนช่วง
-    <select id="spanCount"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></div>
   <button id="btnProject">⚙ กฎโครงการ</button>
-  <button id="btnPasteAll" class="only-model" disabled>วางทุกช่วง</button>
   <button id="btnExcel" class="only-report">⬇ Excel</button><button id="btnPrint" class="only-report">🖨 พิมพ์ / PDF</button>
   <span class="spacer"></span>
   <button id="btnImport">โหลด JSON</button><input type="file" id="fileImport" accept=".json" class="hide">
@@ -32,6 +27,14 @@
 <div id="pageSummary" class="page hide"></div>
 <div id="pageCutsheet" class="page hide"></div>
 <div id="editor" class="page hide">
+  <div class="beamhead">
+    <label>ชั้น<select id="beamFloor" title="ชั้นของคานชุดนี้ (ใช้จัดกลุ่มในหน้ารวม / ใบตัด)"></select></label>
+    <label>ชื่อชุดคาน<input type="text" id="beamName" value="B1" title="ตั้งชื่อเองได้อิสระ เช่น B1 แนว A, คานซอยห้องน้ำ"></label>
+    <label>จำนวนช่วง<select id="spanCount"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+    <button id="btnPasteAll" disabled title="วางข้อมูลช่วงที่คัดลอกไว้ให้ทุกช่วง">วางทุกช่วง</button>
+    <span class="spacer"></span>
+    <span class="bh-id" id="beamIdent"></span>
+  </div>
   <div class="card">
     <div class="rowhead">
       <h2>Model คาน</h2>
