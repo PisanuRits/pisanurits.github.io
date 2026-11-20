@@ -37,25 +37,10 @@
         });
         return;
       }
-      const items = (data.schedule && data.schedule.items) || [];
-      const cover = P(state).cover;
-      items.forEach(it => {
-        const qty = it.userN ?? it.n, sum = it.userLength ?? it.cutLength;   // ความยาวในรายการคาน = ระยะนอก–นอก
-        if (!(qty > 0) || !(sum > 0)) return;
-        let shape, bends;
-        if (it.kind === 'stir') {
-          const sp = (data.spans || []).find(s => `ปลอก ${s.name}` === it.label) || (data.spans || [])[0] || { b: 200, h: 400 };
-          const hook = BCL.hookLen(state, it.bar, 'stirrup135');
-          shape = { code: 'S1', w: sp.b - 2 * cover, h: sp.h - 2 * cover, hook, zones: it.zones || [] };
-          bends = { 90: 3, 135: 2 };
-        } else {
-          const hs = it.hookStart || 0, he = it.hookEnd || 0;
-          shape = { code: hs && he ? 'L2' : hs || he ? 'L1' : 'L0', straight: sum - hs - he, hookStart: hs, hookEnd: he, up: it.kind === 'bot' || it.kind === 'exBot' };
-          bends = { 90: (hs ? 1 : 0) + (he ? 1 : 0) };
-        }
-        const deduct = BCL.bendDeduct(state, it.bar, bends), length = sum - deduct;
-        rows.push({ member: m.name, memberIdx: mi, type: m.type, label: it.label, kind: it.kind, bar: it.bar, length, sum, deduct, bends, qty,
-          weight: qty * length / 1000 * BCL.bar(it.bar).w, shape, lap: it.lapReq || 0, piece: it.piece, of: it.of, runId: it.runId, id: it.id });
+      BCL.beamBarRows(state, data).forEach(r => {   // คาน: รูปทรงระบบเดียวกับฐานราก
+        const it = r.item; if (!(r.qty > 0) || !(r.cut > 0)) return;
+        rows.push({ member: m.name, memberIdx: mi, type: m.type, label: r.label, kind: it.kind, bar: r.bar, length: r.cut, sum: r.sum, deduct: r.deduct, bends: r.bends, qty: r.qty,
+          weight: r.weight, shape: { ...r.shape, code: r.code, f: true, zones: it.zones }, lap: it.lapReq || 0, piece: it.piece, of: it.of, runId: it.runId, id: it.id });
       });
     });
     return rows;

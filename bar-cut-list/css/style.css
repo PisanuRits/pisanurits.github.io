@@ -97,6 +97,9 @@ dialog::backdrop{background:rgba(0,0,0,.25)}
 body:not(.tab-model) .only-model{display:none}
 body.tab-summary .only-report,body.tab-cutsheet .only-report{display:inline-block}
 #logo{cursor:pointer}
+.appshome{font-size:12px;color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;white-space:nowrap}
+.appshome:hover{color:var(--accent);border-color:var(--accent)}
+@media print{.appshome{display:none}}
 .crumb{color:var(--muted)} .crumb a{color:var(--accent);cursor:pointer}
 :root{--conc:#eef1f5;--rb1:#d9480f;--rb2:#1864ab;--rb3:#2b8a3e;--pile:#adb5bd}
 /* ===== หน้ารวม ===== */
@@ -167,6 +170,8 @@ table.bs td.shp text.dim.ed{fill:#e67700;text-decoration:underline #f59f00}
 table.bs td.shp .rst{position:absolute;top:4px;right:4px;padding:1px 6px}
 table.bs td.cut b{font-size:13px} table.bs td.cut small{display:block;font-size:10px;white-space:nowrap}
 table.bs td.cut small.bt{color:#adb5bd} table.bs td.cut.ed{background:#fff9db}
+table.bs td.qed{background:#fff9db;color:#e67700;font-weight:700}
+.bbars{margin-top:14px} .bbars h3{font-size:14px;margin:0 0 8px} .bbars h3 small{font-weight:normal;color:var(--muted);font-size:11px;margin-left:8px}
 table.bs tr.sum td{background:#eef3ff;font-weight:700}
 input.dimedit{position:absolute;transform:translate(-50%,-50%);width:70px;padding:2px 4px;font-size:12px;font-weight:700;text-align:center;border:2px solid var(--accent);border-radius:4px;z-index:5}
 .fbtns{display:flex;align-items:center;gap:8px;margin-top:8px}

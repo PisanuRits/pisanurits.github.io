@@ -9,6 +9,7 @@
 </head>
 <body>
 <header>
+  <a id="appsHome" class="appshome" href="https://pisanurits.github.io/" title="กลับหน้ารวมโปรแกรม (Civil Engineering App)">⌂ แอปทั้งหมด</a>
   <h1 id="logo" title="หน้ารวม">Bar Cut List</h1>
   <span class="crumb" id="crumb"></span>
   <nav class="tabs"><button class="tab" data-page="home">หน้ารวม</button><button class="tab" data-page="summary">สรุป & แผนตัด</button><button class="tab" data-page="cutsheet">ใบตัดเหล็ก</button></nav>
@@ -50,7 +51,7 @@
       <button id="btnSchedToggle" class="tog" title="ย่อ/ขยาย">▾</button>
       <h2>รายการเหล็กทีละเส้น (Bar Schedule)</h2>
       <button id="btnRegen" title="คำนวณใหม่จากข้อมูลคานปัจจุบัน">↻ Generate ใหม่</button>
-      <button id="btnSchedReset" title="ล้างค่าความยาว/จำนวนที่แก้เอง">คืนค่าคำนวณ</button>
+      <button id="btnSchedReset" title="ล้างค่าความยาว/จำนวน/ระยะบนรูปทรงที่แก้เองทั้งหมด">↺ คืนค่าคำนวณทั้งหมด</button>
       <span class="spacer"></span>
       <span id="schedTotal" class="hint"></span>
       <button id="btnToCut" class="primary" title="บันทึกชุดคานนี้เข้ารายการสำหรับทำ Bar Cut List">ส่งไป Bar Cut List →</button>
@@ -59,6 +60,10 @@
     <div id="schedWarnings" class="warnbox hide"></div>
     <div id="schedBody">
       <div id="sched" class="schedwrap"></div>
+      <div class="bbars">
+        <h3>รูปทรงและความยาวตัด <small id="bBendInfo"></small></h3>
+        <div class="tw"><table class="bs" id="bBs"></table></div>
+      </div>
     </div>
   </div>
   <div class="card">

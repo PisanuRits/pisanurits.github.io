@@ -79,14 +79,14 @@
     }
     wrap.innerHTML = ''; wrap.appendChild(svg);
     placed.forEach(({ it, x, y, color, bad }) => {
-      const d = document.createElement('div'); d.className = 'sitem' + (bad ? ' bad' : '') + (it.userLength != null || it.userN != null ? ' edited' : '');
+      const d = document.createElement('div'); d.className = 'sitem' + (bad ? ' bad' : '') + (it.userLength != null || it.userN != null || (state.beam.ovr || {})[it.id + '|' + it.bar] ? ' edited' : '');
       d.dataset.id = it.id; d.style.left = x + 'px'; d.style.top = y + 'px'; d.style.borderColor = color; if (it.kind === 'stir') d.classList.add('stir');
       d.title = it.label + (it.issues.length ? ' — ' + it.issues.join(', ') : '');
       const spacing = '';
       const anchorBtn = it.kind === 'stir' ? '' : `<button class="anc" data-anc="${it.id}" title="ด้านที่ตรึง (คลิกสลับ): ${(it.anchor || 'left') === 'right' ? 'ขวา' : 'ซ้าย'}">${(it.anchor || 'left') === 'right' ? '⇥' : '⇤'}</button>`;
       d.innerHTML = `${anchorBtn}<input type="number" class="n" min="1" data-sid="${it.id}" data-f="userN" value="${it.userN ?? it.n}" title="จำนวน (คำนวณ ${it.n})">
         <b style="color:${color}">-${it.bar}${spacing}</b> <span class="lab">L=</span>
-        <input type="number" class="len" step="${u.step(10)}" min="0" data-sid="${it.id}" data-f="userLength" value="${u.out(it.userLength ?? it.cutLength)}" title="ความยาวตัด ${u.t} (คำนวณ ${u.out(it.cutLength)})">`;
+        <input type="number" class="len" step="${u.step(10)}" min="0" data-sid="${it.id}" data-f="userLength" value="${u.out(BCL.beamItemOut(state.beam, it))}" title="รวมระยะนอก–นอก ${u.t} (คำนวณ ${u.out(it.cutLength)}) — ความยาวตัดหลังหักงอดูในตารางรูปทรงด้านล่าง">`;
       wrap.appendChild(d);
     });
     return { issues };

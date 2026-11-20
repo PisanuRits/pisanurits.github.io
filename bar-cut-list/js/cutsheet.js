@@ -49,7 +49,7 @@
     const note = r => {
       const n = [];
       if (r.shape.f) {
-        if (r.shape.k === 'S') n.push(`ขอ ${r.shape.deg}° สองปลาย`); else if (r.shape.k === 'R') n.push('ขาที่มุม 2 ปลาย'); else if (r.shape.k === 'C') n.push(r.shape.up === false ? 'ขางอลง' : 'ขางอขึ้น');
+        if (r.shape.k === 'S') n.push(`ขอ ${r.shape.deg}° สองปลาย`); else if (r.shape.k === 'R') n.push('ขาที่มุม 2 ปลาย'); else if (r.shape.k === 'C' && (r.shape.leg || r.shape.leg2)) n.push(r.shape.up === false ? 'ขอ/ขางอลง' : 'ขอ/ขางอขึ้น');
       } else if (r.shape.code === 'S1') n.push(`ขอ 135° สองด้าน ${u.out(r.shape.hook)}`);
       if (r.deduct) n.push(`รวมด้าน ${u.out(r.sum)} − หักงอ ${u.out(r.deduct)}`);
       if (!r.shape.f && r.shape.hookStart && r.shape.hookEnd) n.push('งอฉาก 2 ด้าน'); else if (r.shape.hookStart || r.shape.hookEnd) n.push('งอฉาก 1 ด้าน');
@@ -83,7 +83,7 @@
     const u = BCL.units(state);
     let rows = BCL.collectRows(state); if (opts.member) rows = rows.filter(r => r.member === opts.member);
     const out = [['No.', 'รหัสรูปแบบ', 'รูปทรง', `ระยะ A (${u.t})`, `ระยะ B (${u.t})`, `ระยะ C (${u.t})`, 'เหล็ก', `รวมด้าน (${u.t})`, `หักงอ (${u.t})`, `ตัด (${u.t})`, 'จำนวน', 'ชุด', 'ตำแหน่ง', 'น้ำหนัก (กก.)']];
-    const dims = s => s.f ? (s.k === 'S' || s.k === 'R' ? [s.w, s.h, s.hook] : s.k === 'C' ? [s.a, s.leg, s.lip || ''] : s.k === 'L' ? [s.a, s.leg, ''] : [s.a, '', ''])
+    const dims = s => s.f ? (s.k === 'S' || s.k === 'R' ? [s.w, s.h, s.hook] : s.k === 'C' ? [s.a, s.leg || '', s.leg2 != null ? s.leg2 || '' : s.lip || ''] : s.k === 'L' ? [s.a, s.leg, ''] : [s.a, '', ''])
       : s.code === 'S1' ? [s.w, s.h, s.hook] : [s.straight, s.hookStart || s.hookEnd || 0, s.hookStart && s.hookEnd ? s.hookEnd : ''];
     rows.forEach((r, i) => { const s = r.shape, d = dims(s).map(x => x === '' ? '' : u.out(x)); out.push([i + 1, s.code, BCL.SHAPE_T[s.code], ...d, r.bar, u.out(r.sum ?? r.length), u.out(r.deduct || 0), u.out(r.length), r.qty, r.member, r.label, +r.weight.toFixed(2)]); });
     return { name: 'ใบตัดเหล็ก', rows: out };

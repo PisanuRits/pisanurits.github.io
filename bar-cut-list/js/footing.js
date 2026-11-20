@@ -7,15 +7,16 @@
 
   /* ---------- รูปทรง ---------- */
   // k: C (ตะแกรง ขางอ + พับปลาย) | L (งอฉาก 1 ด้าน) | I (ตรง) | S (ปลอก ขอ 90/135) | R (รัดรอบ ขาที่มุม)
-  BCL.fLenOf = sh => sh.k === 'C' ? sh.a + 2 * (sh.leg || 0) + 2 * (sh.lip || 0) : sh.k === 'L' ? sh.a + sh.leg : (sh.k === 'S' || sh.k === 'R') ? 2 * (sh.w + sh.h) + 2 * sh.hook : sh.a;
+  const legsOf = sh => [sh.leg || 0, sh.leg2 != null ? sh.leg2 : (sh.leg || 0)];
+  BCL.fLenOf = sh => sh.k === 'C' ? sh.a + legsOf(sh).reduce((a, l) => a + l + (l ? sh.lip || 0 : 0), 0) : sh.k === 'L' ? sh.a + sh.leg : (sh.k === 'S' || sh.k === 'R') ? 2 * (sh.w + sh.h) + 2 * sh.hook : sh.a;
   BCL.fBendsOf = sh => {
-    if (sh.k === 'C') return { 90: (sh.leg ? 2 : 0) + (sh.leg && sh.lip ? 2 : 0) };
+    if (sh.k === 'C') return { 90: legsOf(sh).reduce((a, l) => a + (l ? 1 + (sh.lip ? 1 : 0) : 0), 0) };
     if (sh.k === 'L') return { 90: 1 };
     if (sh.k === 'S' && sh.deg === 135) return { 90: 3, 135: 2 };
     if (sh.k === 'S' || sh.k === 'R') return { 90: 5 };
     return {};
   };
-  BCL.fCode = sh => sh.k === 'C' ? (sh.leg ? (sh.lip ? 'C' : 'L2') : 'L0') : sh.k === 'L' ? 'L1' : sh.k === 'I' ? 'L0' : sh.k === 'R' ? 'R1' : sh.deg === 90 ? 'S2' : 'S1';
+  BCL.fCode = sh => sh.k === 'C' ? (n => n === 0 ? 'L0' : sh.lip ? 'C' : n === 1 ? 'L1' : 'L2')(legsOf(sh).filter(Boolean).length) : sh.k === 'L' ? 'L1' : sh.k === 'I' ? 'L0' : sh.k === 'R' ? 'R1' : sh.deg === 90 ? 'S2' : 'S1';
   BCL.fBendText = bends => [135, 90, 180].filter(a => bends[a]).map(a => `${a}°×${bends[a]}`).join(' + ');
 
   /* วาดรูปทรง (ไม่ scale, ระยะนอก–นอก). editable → ตัวเลขเป็น text.dim คลิกแก้ได้ */
@@ -25,12 +26,16 @@
     const ln = d => g.appendChild(E('path', { d, fill: 'none', stroke: RED, 'stroke-width': 3.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
     const tx = (x, y, f, anc = 'middle') => g.appendChild(E('text', { x, y, 'font-size': 11.5, 'font-weight': 700, 'text-anchor': anc, class: 'dim' + (edited[f] != null ? ' ed' : ''), 'data-f': f }, u.out(sh[f])));
     if (sh.k === 'C') {
-      const up = sh.up !== false, d = up ? -1 : 1, y = up ? 60 : 18, legP = sh.leg ? Math.max(14, Math.min(36, 10 + sh.leg / 20)) : 0, lipP = sh.leg && sh.lip ? Math.max(10, Math.min(30, 8 + sh.lip / 20)) : 0, x0 = 40, x1 = 190;
-      let p = `M${x0},${y} L${x1},${y}`;
-      if (legP) p = lipP ? `M${x0 + lipP},${y + d * legP} L${x0},${y + d * legP} L${x0},${y} L${x1},${y} L${x1},${y + d * legP} L${x1 - lipP},${y + d * legP}` : `M${x0},${y + d * legP} L${x0},${y} L${x1},${y} L${x1},${y + d * legP}`;
+      const up = sh.up !== false, d = up ? -1 : 1, y = up ? 60 : 18, x0 = 40, x1 = 190, [lL, lR] = legsOf(sh);
+      const lp = l => l ? Math.max(14, Math.min(36, 10 + l / 20)) : 0, pL = lp(lL), pR = lp(lR);
+      const lipP = sh.lip ? Math.max(10, Math.min(30, 8 + sh.lip / 20)) : 0, qL = pL ? lipP : 0, qR = pR ? lipP : 0;
+      let p = pL ? (qL ? `M${x0 + qL},${y + d * pL} L${x0},${y + d * pL} ` : `M${x0},${y + d * pL} `) + `L${x0},${y}` : `M${x0},${y}`;
+      p += ` L${x1},${y}` + (pR ? ` L${x1},${y + d * pR}` + (qR ? ` L${x1 - qR},${y + d * pR}` : '') : '');
       ln(p); tx(115, up ? y + 15 : y - 6, 'a');
-      if (legP) { tx(x0 - 5, y + d * legP / 2 + 4, 'leg', 'end'); tx(x1 + 5, y + d * legP / 2 + 4, 'leg', 'start'); }
-      if (lipP) { tx(x0 + lipP / 2, y + d * legP + (up ? -5 : 14), 'lip'); tx(x1 - lipP / 2, y + d * legP + (up ? -5 : 14), 'lip'); }
+      if (pL) tx(x0 - 5, y + d * pL / 2 + 4, 'leg', 'end');
+      if (pR) tx(x1 + 5, y + d * pR / 2 + 4, sh.leg2 != null ? 'leg2' : 'leg', 'start');
+      if (qL) tx(x0 + qL / 2, y + d * pL + (up ? -5 : 14), 'lip');
+      if (qR) tx(x1 - qR / 2, y + d * pR + (up ? -5 : 14), 'lip');
     } else if (sh.k === 'L') {
       const lg = Math.max(16, Math.min(60, sh.leg / 10)); ln(`M70,8 L70,60 L${70 + lg},60`); tx(62, 36, 'a', 'end'); tx(70 + lg / 2, 74, 'leg');
     } else if (sh.k === 'I') { ln('M30,42 L200,42'); tx(115, 34, 'a'); }
@@ -276,6 +281,40 @@
     add(E('text', { x: cxs, y: yBotF + 74, 'text-anchor': 'middle', 'font-size': 11 }, `${c.tri ? 'ด้าน' : 'B'} = ${m(B)} ${u.t} (ไม่ตามสเกล)`));
   }
 
+  /* ---------- ตารางรายการเหล็กทีละเส้น (ใช้ร่วม ฐานราก / คาน) ----------
+     rows: { key, label, note, bar, code, shape, calcShape, edited, isEd, qtyEd, sum, calcSum, bends, deduct, cut, qty, weight }
+     o: { mult, qtyHead, multHead, totalLabel, onEdit(r, field, mm), onRestore(r) } */
+  BCL.bendInfoText = state => { const b = state.project.bend || {};
+    return b.on === false ? 'ความยาวตัด = รวมระยะนอก–นอก (ไม่หักการงอ — ตั้งได้ใน ⚙ กฎโครงการ)' : `ความยาวตัด = รวมระยะนอก–นอก − ค่าหักการงอ (90°=${b.f90}d, 135°=${b.f135}d)`; };
+  BCL.renderBarList = function (tbl, state, rows, o) {
+    const u = BCL.units(state), m = u.out, mult = o.mult || 1, showMult = o.multHead != null;
+    let h = `<tr><th>#</th><th>รายการ</th><th>เหล็ก</th><th>รูปทรง (ระยะนอก–นอก, ${u.t})<br><small>คลิกตัวเลขเพื่อแก้</small></th><th>ตัด (${u.t})</th><th>${o.qtyHead || 'จำนวน'}</th>${showMult ? `<th>${o.multHead}</th>` : ''}<th>นน. (กก.)</th></tr>`, kg = 0, tot = 0;
+    rows.forEach((r, i) => {
+      const w = r.weight * mult; kg += w; tot += r.qty * mult;
+      const calcCut = r.calcSum - BCL.bendDeduct(state, r.bar, BCL.fBendsOf(r.calcShape));
+      h += `<tr><td>${i + 1}</td><td class="l">${r.label}${r.note ? `<br><small>${r.note}</small>` : ''}<br><small class="code">${r.code} ${BCL.SHAPE_T[r.code] || ''}</small></td><td><b>${r.bar}</b></td>
+        <td class="shp${r.isEd ? ' ed' : ''}" data-i="${i}">${r.isEd || r.qtyEd ? `<button class="rst" data-i="${i}" title="คืนค่าที่โปรแกรมคำนวณ">↺</button>` : ''}</td>
+        <td class="cut${r.isEd ? ' ed' : ''}"><b>${m(r.cut)}</b>${r.deduct ? `<small>รวมด้าน ${m(r.sum)} − หักงอ ${m(r.deduct)}</small><small class="bt">${BCL.fBendText(r.bends)}</small>` : ''}${r.isEd && calcCut !== r.cut ? `<small>คำนวณ ${m(calcCut)}</small>` : ''}</td>
+        <td class="${r.qtyEd ? 'qed' : ''}">${r.qty}</td>${showMult ? `<td><b>${r.qty * mult}</b></td>` : ''}<td>${w.toFixed(1)}</td></tr>`;
+    });
+    h += `<tr class="sum"><td colspan="${showMult ? 6 : 5}">${o.totalLabel || 'รวม'}</td><td>${tot}</td><td>${kg.toFixed(1)}</td></tr>`;
+    tbl.innerHTML = h;
+    tbl.querySelectorAll('td.shp').forEach(td => { const r = rows[+td.dataset.i]; td.appendChild(BCL.fShapeSVG(r.shape, u, r.edited)); });
+    tbl.querySelectorAll('td.shp text.dim').forEach(t => t.addEventListener('click', () => {
+      const td = t.closest('td'), r = rows[+td.dataset.i], fld = t.dataset.f, bb = t.getBoundingClientRect(), tb = td.getBoundingClientRect();
+      const inp = document.createElement('input'); inp.type = 'number'; inp.className = 'dimedit'; inp.step = u.step(5); inp.value = m(r.shape[fld]);
+      inp.style.left = (bb.left - tb.left + bb.width / 2) + 'px'; inp.style.top = (bb.top - tb.top + bb.height / 2) + 'px';
+      td.appendChild(inp); inp.focus(); inp.select();
+      let done = false;
+      const commit = ok => { if (done) return; done = true;
+        const val = ok && inp.value !== '' ? u.in(inp.value) : null;
+        setTimeout(() => { if (val != null && val >= 0) o.onEdit(r, fld, Math.round(val)); else o.onRestore && inp.remove(); }); };
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(true); if (e.key === 'Escape') commit(false); });
+      inp.addEventListener('blur', () => commit(true));
+    }));
+    tbl.querySelectorAll('button.rst').forEach(b => b.addEventListener('click', () => o.onRestore(rows[+b.dataset.i])));
+  };
+
   /* ---------- หน้าฐานราก ---------- */
   BCL.renderFooting = function (root, state, hooks) {
     const f = state.footing;
@@ -344,35 +383,15 @@
     }
 
     function renderList(c) {
-      const tbl = root.querySelector('#fBs'), n = Math.max(1, f.count | 0), m = u.out, bend = state.project.bend || {};
-      root.querySelector('#fBendInfo').textContent = bend.on === false ? 'ความยาวตัด = รวมระยะนอก–นอก (ไม่หักการงอ — ตั้งได้ใน ⚙ กฎโครงการ)' : `ความยาวตัด = รวมระยะนอก–นอก − ค่าหักการงอ (90°=${bend.f90}d, 135°=${bend.f135}d)`;
-      let h = `<tr><th>#</th><th>รายการ</th><th>เหล็ก</th><th>รูปทรง (ระยะนอก–นอก, ${u.t})<br><small>คลิกตัวเลขเพื่อแก้</small></th><th>ตัด (${u.t})</th><th>ต่อฐาน</th><th>× ${n} ฐาน</th><th>นน. (กก.)</th></tr>`, kg = 0, tot = 0;
-      c.rows.forEach((r, i) => {
-        const w = r.weight * n; kg += w; tot += r.qty * n;
-        h += `<tr><td>${i + 1}</td><td class="l">${r.label}${r.note ? `<br><small>${r.note}</small>` : ''}<br><small class="code">${r.code} ${BCL.SHAPE_T[r.code] || ''}</small></td><td><b>${r.bar}</b></td>
-          <td class="shp${r.isEd ? ' ed' : ''}" data-i="${i}">${r.isEd ? `<button class="rst" data-key="${r.key}" title="คืนค่าที่โปรแกรมคำนวณ">↺</button>` : ''}</td>
-          <td class="cut${r.isEd ? ' ed' : ''}"><b>${m(r.cut)}</b>${r.deduct ? `<small>รวมด้าน ${m(r.sum)} − หักงอ ${m(r.deduct)}</small><small class="bt">${BCL.fBendText(r.bends)}</small>` : ''}${r.isEd ? `<small>คำนวณ ${m(r.calcSum - BCL.bendDeduct(state, r.bar, BCL.fBendsOf(r.calcShape)))}</small>` : ''}</td>
-          <td>${r.qty}</td><td><b>${r.qty * n}</b></td><td>${w.toFixed(1)}</td></tr>`;
+      const n = Math.max(1, f.count | 0);
+      root.querySelector('#fBendInfo').textContent = BCL.bendInfoText(state);
+      BCL.renderBarList(root.querySelector('#fBs'), state, c.rows, {
+        mult: n, qtyHead: 'ต่อฐาน', multHead: `× ${n} ฐาน`, totalLabel: `รวม ${f.name} × ${n} ฐาน`,
+        onEdit: (r, fld, val) => { f.ovr = f.ovr || {}; const o = f.ovr[r.key] || (f.ovr[r.key] = {});
+          if (Math.abs(val - r.calcShape[fld]) < 0.5) delete o[fld]; else o[fld] = val;
+          if (!Object.keys(o).length) delete f.ovr[r.key]; BCL.save(state); refresh(); },
+        onRestore: r => { delete f.ovr[r.key]; BCL.save(state); refresh(); },
       });
-      h += `<tr class="sum"><td colspan="6">รวม ${f.name} × ${n} ฐาน</td><td>${tot}</td><td>${kg.toFixed(1)}</td></tr>`;
-      tbl.innerHTML = h;
-      tbl.querySelectorAll('td.shp').forEach(td => { const r = c.rows[+td.dataset.i]; td.appendChild(BCL.fShapeSVG(r.shape, u, r.edited)); });
-      tbl.querySelectorAll('td.shp text.dim').forEach(t => t.addEventListener('click', () => {
-        const td = t.closest('td'), r = c.rows[+td.dataset.i], fld = t.dataset.f, bb = t.getBoundingClientRect(), tb = td.getBoundingClientRect();
-        const inp = document.createElement('input'); inp.type = 'number'; inp.className = 'dimedit'; inp.step = u.step(5); inp.value = m(r.shape[fld]);
-        inp.style.left = (bb.left - tb.left + bb.width / 2) + 'px'; inp.style.top = (bb.top - tb.top + bb.height / 2) + 'px';
-        td.appendChild(inp); inp.focus(); inp.select();
-        let done = false;
-        const commit = ok => { if (done) return; done = true;
-          if (ok) { const val = u.in(inp.value);
-            if (val >= 0 && val != null) { f.ovr = f.ovr || {}; const o = f.ovr[r.key] || (f.ovr[r.key] = {});
-              if (Math.abs(val - r.calcShape[fld]) < 0.5) delete o[fld]; else o[fld] = val;
-              if (!Object.keys(o).length) delete f.ovr[r.key]; BCL.save(state); } }
-          setTimeout(refresh); };
-        inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(true); if (e.key === 'Escape') commit(false); });
-        inp.addEventListener('blur', () => commit(true));
-      }));
-      tbl.querySelectorAll('button.rst').forEach(b => b.addEventListener('click', () => { delete f.ovr[b.dataset.key]; BCL.save(state); refresh(); }));
       root.querySelector('#fRestore').disabled = !Object.keys(f.ovr || {}).length;
     }
     refresh();

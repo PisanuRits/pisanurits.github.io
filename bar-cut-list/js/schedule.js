@@ -64,7 +64,7 @@
     // ปลอก: 1 รายการต่อช่วง (ความยาวตัดเท่ากันทั้งช่วง) แยกโซนไว้สำหรับแสดงผล
     G.stirrups.forEach((st, i) => {
       const g = G.spans[i];
-      push({ kind: 'stir', bar: st.bar, n: st.count, x0: g.x0, x1: g.x1, hookStart: 0, hookEnd: 0, lap: 0, cutLength: st.cutLength, positions: st.positions,
+      push({ kind: 'stir', bar: st.bar, n: st.count, x0: g.x0, x1: g.x1, hookStart: 0, hookEnd: 0, lap: 0, cutLength: st.cutLength, w: st.w, h: st.h, hook: st.hook, positions: st.positions,
         zones: st.zones.map(z => ({ x0: z.x0, x1: z.x1, s: z.s, count: z.count, label: z.label })), label: `ปลอก ${g.name}` });
     });
 
@@ -72,6 +72,10 @@
     const old = (state.beam.schedule && state.beam.schedule.items) || [];
     items.forEach(it => { const o = old.find(x => x.id === it.id && x.bar === it.bar); it.userLength = o && o.userLength != null && o.cutLength === it.cutLength ? o.userLength : null; it.userN = o && o.userN != null && o.n === it.n ? o.userN : null; if (o && o.anchor && o.cutLength === it.cutLength) it.anchor = o.anchor; });
 
+    // คงระยะที่แก้บนรูปทรง (ovr) เฉพาะรายการที่ยังมีอยู่และความยาวคำนวณไม่เปลี่ยน
+    const ovr = state.beam.ovr || {}, keep = {};
+    items.forEach(it => { const k = it.id + '|' + it.bar, o = old.find(x => x.id === it.id && x.bar === it.bar); if (ovr[k] && o && o.cutLength === it.cutLength) keep[k] = ovr[k]; });
+    state.beam.ovr = keep;
     state.beam.schedule = { generatedAt: Date.now(), stale: false, items, warnings };
     return state.beam.schedule;
   };
@@ -97,6 +101,58 @@
     return eff;
   };
 
-  /* สรุปรายการสำหรับขั้น cut list (ใช้ตอนส่งชุดคานเข้ารายการ) */
-  BCL.scheduleRows = state => (state.beam.schedule?.items || []).map(it => ({ id: it.id, bar: it.bar, qty: it.userN ?? it.n, length: it.userLength ?? it.cutLength, label: it.label }));
+  /* ---------- รูปทรงเหล็กคาน (ระบบเดียวกับฐานราก) ----------
+     เหล็กแกน = C (a = ช่วงตรง, leg = ขอซ้าย, leg2 = ขอขวา) · ปลอก = S ขอ 135°
+     แก้ a → userLength (ระยะนอก–นอกตามขอเดิม ใช้วางตำแหน่ง/ทาบ) · แก้ขอ/ปลอก → beam.ovr[id|bar] */
+  const keyOf = it => it.id + '|' + it.bar;
+  BCL.beamShapeOf = function (beam, it) {
+    const o = (beam.ovr || {})[keyOf(it)] || {}, edited = {};
+    let calc, shape;
+    if (it.kind === 'stir') {
+      calc = { k: 'S', w: it.w, h: it.h, hook: it.hook, deg: 135 };
+      shape = { ...calc, ...o }; Object.keys(o).forEach(f => edited[f] = 1);
+      if (it.userLength != null && !Object.keys(o).length) { shape.hook = Math.round((it.userLength - 2 * (calc.w + calc.h)) / 2); edited.hook = 1; }
+    } else {
+      const hs = it.hookStart || 0, he = it.hookEnd || 0, up = it.kind === 'bot' || it.kind === 'exBot';
+      calc = { k: 'C', a: it.cutLength - hs - he, leg: hs, leg2: he, lip: 0, up };
+      shape = { ...calc, a: (it.userLength ?? it.cutLength) - hs - he, leg: o.leg ?? hs, leg2: o.leg2 ?? he };
+      if (it.userLength != null) edited.a = 1; if (o.leg != null) edited.leg = 1; if (o.leg2 != null) edited.leg2 = 1;
+    }
+    return { calc, shape, edited };
+  };
+  BCL.beamBarRows = function (state, beam) {
+    const items = (beam.schedule && beam.schedule.items) || [];
+    const cover = state.project.cover;
+    return items.map(it => {
+      if (it.kind === 'stir' && it.w == null) {   // ข้อมูลจากเวอร์ชันเก่า: คำนวณขนาดปลอกจากหน้าตัดคาน
+        const sp = (beam.spans || []).find(s => `ปลอก ${s.name}` === it.label) || (beam.spans || [])[0] || { b: 200, h: 400 };
+        Object.assign(it, { w: sp.b - 2 * cover, h: sp.h - 2 * cover, hook: BCL.hookLen(state, it.bar, 'stirrup135') });
+      }
+      const { calc, shape, edited } = BCL.beamShapeOf(beam, it), qty = it.userN ?? it.n;
+      const sum = Math.round(BCL.fLenOf(shape)), bends = BCL.fBendsOf(shape), deduct = BCL.bendDeduct(state, it.bar, bends), cut = sum - deduct;
+      const u = BCL.units(state), note = it.kind === 'stir' ? `ขอ 135° · ${it.n} ตัวตามระยะ` : it.lap ? `เผื่อทาบ ${u.out(it.lap)} ${u.t}` : '';
+      return { key: keyOf(it), item: it, label: it.label, note, bar: it.bar, code: BCL.fCode(shape), shape, calcShape: calc, edited, isEd: Object.keys(edited).length > 0,
+        qtyEd: it.userN != null, sum, calcSum: Math.round(BCL.fLenOf(calc)), bends, deduct, cut, qty, weight: qty * cut / 1000 * BCL.bar(it.bar).w };
+    });
+  };
+  /* ค่าที่แสดงในช่อง L= บนรูปวางเหล็ก = รวมระยะนอก–นอก (รวมขอที่แก้แล้ว) */
+  BCL.beamItemOut = (beam, it) => Math.round(BCL.fLenOf(BCL.beamShapeOf(beam, it).shape));
+  BCL.beamSetOut = function (beam, it, v) {   // ผู้ใช้พิมพ์ L= (นอก–นอก)
+    const k = keyOf(it), o = (beam.ovr || {})[k] || {};
+    if (it.kind === 'stir') { if (beam.ovr) delete beam.ovr[k]; it.userLength = v > 0 && v !== it.cutLength ? v : null; return; }
+    const dLeg = (o.leg ?? (it.hookStart || 0)) - (it.hookStart || 0) + (o.leg2 ?? (it.hookEnd || 0)) - (it.hookEnd || 0), len = v - dLeg;
+    it.userLength = v > 0 && len !== it.cutLength ? len : null;
+  };
+  BCL.beamEdit = function (beam, r, fld, val) {   // แก้ตัวเลขบนรูปทรง
+    const it = r.item, k = r.key; beam.ovr = beam.ovr || {};
+    if (it.kind !== 'stir' && fld === 'a') { const len = val + (it.hookStart || 0) + (it.hookEnd || 0); it.userLength = len === it.cutLength ? null : len; return; }
+    if (it.kind === 'stir') it.userLength = null;
+    const o = beam.ovr[k] || (beam.ovr[k] = {});
+    if (Math.abs(val - r.calcShape[fld]) < 0.5) delete o[fld]; else o[fld] = val;
+    if (!Object.keys(o).length) delete beam.ovr[k];
+  };
+  BCL.beamRestore = function (beam, r) { if (beam.ovr) delete beam.ovr[r.key]; r.item.userLength = null; r.item.userN = null; };
+
+  /* สรุปรายการสำหรับขั้น cut list (ความยาว = ตัดจริงหลังหักงอ) */
+  BCL.scheduleRows = state => BCL.beamBarRows(state, state.beam).map(r => ({ id: r.item.id, bar: r.bar, qty: r.qty, length: r.cut, label: r.label }));
 })(window.BCL);
