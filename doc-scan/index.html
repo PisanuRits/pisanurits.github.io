@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>สแกนเอกสาร PDF</title>
+<meta name="description" content="ถ่ายรูปหรือนำเข้ารูป แล้วแปลงเป็นเอกสาร PDF คมชัดเหมือนเครื่องสแกน">
+<meta name="theme-color" content="#0B0C10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=Prompt:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0C10;--s1:#15171D;--s2:#1D2028;--line:#2A2E38;--line2:#22252E;
+  --fg:#F3F4F6;--fg2:#D4D7DD;--muted:#A0A6B2;--accent:#C8F169;--accent-ink:#0B0C10;--danger:#FF8A7A;
+  --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:'IBM Plex Sans Thai',system-ui,-apple-system,'Segoe UI',sans-serif;overscroll-behavior:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+h1,h2{margin:0}
+.title{font-family:Prompt,'IBM Plex Sans Thai',sans-serif;font-weight:600}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;background:var(--bg);max-width:560px;margin:0 auto}
+.screen.on{display:flex}
+.top{padding:calc(var(--st) + 14px) 16px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ib{width:44px;height:44px;border-radius:14px;border:1px solid var(--line);background:var(--s1);display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+.pill{height:36px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--fg2);font-size:14px;white-space:nowrap}
+.pill.on{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:600}
+.btn{height:52px;border-radius:16px;border:1px solid var(--line);background:var(--s2);font-size:15px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 18px}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border:0;font-weight:600}
+.btn.sm{height:44px;border-radius:14px}
+.btn:disabled{opacity:.45}
+.card{border-radius:18px;background:var(--s1);border:1px solid var(--line2);overflow:hidden}
+.muted{color:var(--muted)}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* home */
+.search{display:flex;align-items:center;gap:10px;height:48px;padding:0 16px;border-radius:16px;background:var(--s1);border:1px solid var(--line);margin:0 16px}
+.search input{flex:1;min-width:0;background:transparent;border:0;outline:none;font-size:15px}
+.chips{display:flex;gap:8px;padding:14px 16px 0;overflow-x:auto;scrollbar-width:none}
+.doc{display:flex;align-items:center;gap:14px;padding:12px;border-radius:20px;background:var(--s1);border:1px solid var(--line2);width:100%;text-align:left}
+.doc img{width:52px;height:68px;object-fit:cover;border-radius:6px;background:#ECEDE8;flex:none}
+.doc .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.doc .n{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{height:26px;padding:0 10px;border-radius:999px;background:var(--s2);font-size:12px;display:flex;align-items:center;flex:none}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:48px 24px;color:var(--muted)}
+.empty .ill{width:84px;height:108px;border-radius:10px;border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.nav{flex:none;height:calc(92px + var(--sb));padding:0 44px var(--sb);border-top:1px solid var(--s2);display:flex;justify-content:space-between;align-items:center;background:var(--bg)}
+.nav .it{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:64px;font-size:12px;color:var(--muted);background:none;border:0;padding:6px 0}
+.nav .it.on{color:var(--fg)}
+.fab{width:68px;height:68px;margin-top:-36px;border-radius:24px;background:var(--accent);color:var(--accent-ink);border:0;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(200,241,105,.25)}
+.fab svg.i{width:30px;height:30px;stroke-width:2}
+
+/* camera */
+#camera{background:#000}
+#video,#camOverlay{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.camtop{position:absolute;top:calc(var(--st) + 12px);left:16px;right:16px;display:flex;justify-content:space-between;align-items:center;z-index:2}
+.glass{background:rgba(11,12,16,.62);border:0;color:var(--fg);border-radius:999px;height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 14px;font-size:14px;font-weight:600}
+.glass.round{padding:0;width:44px}
+.glass.on{color:var(--accent)}
+.dot{width:8px;height:8px;border-radius:999px;background:currentColor}
+.hint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(206px + var(--sb));height:36px;padding:0 16px;border-radius:999px;background:rgba(11,12,16,.78);display:flex;align-items:center;gap:8px;font-size:14px;white-space:nowrap;z-index:2}
+.cambar{position:absolute;left:0;right:0;bottom:0;padding:14px 24px calc(22px + var(--sb));background:rgba(11,12,16,.92);display:flex;flex-direction:column;gap:16px;z-index:2}
+.modes{display:flex;justify-content:center;gap:4px}
+.modes button{height:32px;padding:0 14px;border-radius:999px;border:0;background:transparent;color:var(--muted);font-size:14px}
+.modes button.on{background:var(--fg);color:var(--bg);font-weight:600}
+.shotrow{display:flex;justify-content:space-between;align-items:center}
+.shutter{width:84px;height:84px;border-radius:999px;border:4px solid var(--fg);background:transparent;display:flex;align-items:center;justify-content:center;padding:0}
+.shutter span{width:64px;height:64px;border-radius:999px;background:var(--fg);transition:transform .1s}
+.shutter:active span{transform:scale(.9)}
+.stack{width:56px;height:56px;position:relative;border:0;background:none;padding:0}
+.stack img{position:absolute;inset:0 6px 6px 0;width:50px;height:50px;object-fit:cover;border-radius:8px;background:#3A3D45}
+.stack .b{position:absolute;inset:6px 0 0 6px;border-radius:8px;background:#3A3D45}
+.badge{position:absolute;top:-8px;right:-8px;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s;z-index:3}
+.camerr{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px;text-align:center;z-index:1}
+
+/* crop */
+.stage{position:relative;flex:1;min-height:240px;margin:0 16px;border-radius:24px;background:var(--s1);overflow:hidden;touch-action:none}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#resultImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;background:var(--s1)}
+.seg{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;padding:3px;border-radius:999px;background:rgba(11,12,16,.8);z-index:2}
+.seg button{height:30px;padding:0 14px;border-radius:999px;border:0;background:transparent;color:var(--muted);font-size:13px}
+.seg button.on{background:var(--fg);color:var(--bg);font-weight:600}
+.autochip{position:absolute;left:12px;right:12px;bottom:12px;display:flex;justify-content:center;pointer-events:none}
+.autochip div{display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 14px;border-radius:999px;background:rgba(11,12,16,.85);font-size:12.5px;color:var(--fg2);text-align:center}
+.busy{position:absolute;top:50px;right:12px;width:22px;height:22px;border-radius:999px;border:3px solid rgba(200,241,105,.25);border-top-color:var(--accent);animation:spin .8s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px 16px 0}
+.tool{height:60px;border-radius:16px;border:1px solid var(--line);background:var(--s1);font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0}
+.tool.pri{background:var(--accent);color:var(--accent-ink);border:0;font-weight:600}
+.angle{padding:10px 16px 0;display:flex;flex-direction:column;gap:2px}
+.angle .r{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:30px;margin:0;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;margin-top:-10px;border-radius:999px;background:var(--fg);border:0}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--line)}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:999px;background:var(--fg);border:0}
+.filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:6px 16px calc(14px + var(--sb))}
+.flt{display:flex;flex-direction:column;align-items:center;gap:4px;padding:0;border:0;background:transparent;color:var(--muted);font-size:12px}
+.flt .sw{width:100%;height:54px;border-radius:12px;border:2px solid var(--line);padding:9px 8px;display:flex;flex-direction:column;gap:4px}
+.flt .sw i{display:block;height:3px;border-radius:2px}
+.flt .sw i:first-child{height:4px;width:60%}
+.flt.on{color:var(--fg);font-weight:600}
+.flt.on .sw{border-color:var(--accent)}
+
+/* export */
+.pages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:0 16px}
+.pg{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:0;font-size:12px;color:var(--muted);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.pg .th{width:100%;aspect-ratio:.707;border-radius:8px;background:#fff;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center}
+.pg .th img{max-width:100%;max-height:100%;display:block;pointer-events:none}
+.pg .th .spin{position:absolute;inset:auto;width:20px;height:20px;border-radius:999px;border:3px solid #ddd;border-top-color:#555;animation:spin .8s linear infinite}
+.pg.drag{opacity:.35}
+.pg.ghost{position:fixed;z-index:50;pointer-events:none;opacity:.9;transform:scale(1.06)}
+.pg.add .th{background:transparent;border:1.5px dashed #3A3E49;color:var(--accent)}
+.row{display:flex;justify-content:space-between;align-items:center;min-height:52px;padding:0 16px;border-bottom:1px solid var(--line2);font-size:15px;gap:12px}
+.row:last-child{border-bottom:0}
+.row select{background:transparent;border:0;color:var(--muted);text-align:right;font-size:15px;outline:none;max-width:60%}
+.row select option{background:var(--s1);color:var(--fg)}
+.fname{display:flex;align-items:center;gap:8px;height:52px;padding:0 8px 0 16px;border-radius:16px;background:var(--s1);border:1px solid var(--line)}
+.fname input{flex:1;min-width:0;background:transparent;border:0;outline:none;font-size:15px}
+.sheetbar{flex:none;padding:16px 16px calc(18px + var(--sb));background:#121419;border-top:1px solid var(--line2);border-radius:28px 28px 0 0;display:flex;flex-direction:column;gap:10px}
+.lbl{font-size:13px;color:var(--muted)}
+.sec{padding:18px 16px 0;display:flex;flex-direction:column;gap:8px}
+.sec h2{font-size:13px;font-weight:500;color:var(--muted);padding-left:4px}
+
+/* settings */
+.tg{width:100%;display:flex;align-items:center;gap:12px;padding:12px 16px;border:0;border-bottom:1px solid var(--line2);background:transparent;text-align:left}
+.tg:last-child{border-bottom:0}
+.tg .tx{flex:1;display:flex;flex-direction:column;gap:2px}
+.tg .tx b{font-size:15px;font-weight:500}
+.tg .tx small{font-size:12px;color:var(--muted)}
+.sw2{width:48px;height:28px;border-radius:999px;background:var(--line);position:relative;flex:none;transition:background .15s}
+.sw2::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:999px;background:var(--muted);transition:all .15s}
+.tg[aria-pressed=true] .sw2{background:var(--accent)}
+.tg[aria-pressed=true] .sw2::after{left:23px;background:var(--bg)}
+.tok{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:44px;padding:6px 10px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.tok button{height:30px;padding:0 8px 0 10px;border-radius:8px;border:0;background:#2B3320;color:var(--accent);font-size:13px;display:flex;align-items:center;gap:4px}
+.tok .sep{color:var(--muted)}
+.addt{height:34px;padding:0 12px;border-radius:999px;border:1px dashed #3A3E49;background:transparent;color:var(--fg2);font-size:13px}
+.inp{height:44px;width:100%;padding:0 14px;border-radius:12px;background:var(--bg);border:1px solid var(--line);outline:none;font-size:15px}
+
+/* sheet + toast */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:40;align-items:flex-end;justify-content:center}
+.mask.on{display:flex}
+.sheet{width:100%;max-width:560px;background:#121419;border-radius:24px 24px 0 0;border-top:1px solid var(--line2);padding:10px 16px calc(18px + var(--sb));display:flex;flex-direction:column;gap:8px}
+.sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 6px}
+.sheet .hd{font-weight:600;padding:4px 4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet .btn{justify-content:flex-start}
+.sheet .btn.danger{color:var(--danger)}
+.toast{position:fixed;left:50%;bottom:calc(120px + var(--sb));transform:translateX(-50%) translateY(20px);opacity:0;max-width:calc(100% - 32px);padding:12px 18px;border-radius:14px;background:var(--fg);color:var(--bg);font-size:14px;font-weight:500;transition:all .2s;z-index:60;pointer-events:none;text-align:center}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.loading{position:fixed;bottom:calc(112px + var(--sb));left:50%;transform:translateX(-50%);z-index:30;height:32px;padding:0 14px;border-radius:999px;background:rgba(21,23,29,.95);border:1px solid var(--line);font-size:12.5px;color:var(--fg2);display:none;align-items:center;gap:8px}
+.loading.on{display:flex}
+.loading i{width:14px;height:14px;border-radius:999px;border:2px solid rgba(200,241,105,.25);border-top-color:var(--accent);animation:spin .8s linear infinite}
+.viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:45;display:none;align-items:center;justify-content:center}
+.viewer.on{display:flex}
+.viewer img{max-width:100%;max-height:100%}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M7 12h10"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-flash" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></symbol>
+  <symbol id="i-rot" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+  <symbol id="i-detect" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-nocrop" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.9-9.9A6 6 0 0 1 17.6 7 4.5 4.5 0 0 1 17 18z"/><path d="M12 11v6M9.5 13.5L12 11l2.5 2.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z" fill="currentColor" stroke="none"/></symbol>
+</svg>
+
+<div class="loading" id="loading" role="status"><i></i><span>กำลังโหลดตัวประมวลผลภาพ…</span></div>
+
+<!-- HOME -->
+<section class="screen on" id="home" aria-label="เอกสารของฉัน">
+  <div class="top" style="padding-top:calc(var(--st) + 28px)">
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <span class="muted" style="font-size:13px">สแกนเอกสาร PDF</span>
+      <h1 class="title" style="font-size:28px">เอกสารของฉัน</h1>
+    </div>
+    <button class="ib" id="toSettings" aria-label="ตั้งค่า"><svg class="i"><use href="#i-gear"/></svg></button>
+  </div>
+  <label class="search"><svg class="i muted" style="width:18px;height:18px"><use href="#i-search"/></svg><span class="sr">ค้นหาเอกสาร</span><input type="search" id="q" placeholder="ค้นหาเอกสาร"></label>
+  <div class="chips" id="chips"></div>
+  <div class="scroll" style="padding:18px 16px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+      <h2 style="font-size:15px;font-weight:600;color:var(--fg2)">ล่าสุด</h2><span class="muted" style="font-size:13px" id="docCount"></span>
+    </div>
+    <div id="docList" style="display:flex;flex-direction:column;gap:12px"></div>
+  </div>
+  <nav class="nav">
+    <button class="it on"><svg class="i" style="width:22px;height:22px"><use href="#i-doc"/></svg>เอกสาร</button>
+    <button class="fab" id="fabScan" aria-label="สแกนเอกสารใหม่"><svg class="i"><use href="#i-scan"/></svg></button>
+    <button class="it" id="navImport"><svg class="i" style="width:22px;height:22px"><use href="#i-image"/></svg>นำเข้ารูป</button>
+  </nav>
+</section>
+
+<!-- CAMERA -->
+<section class="screen" id="camera" aria-label="ถ่ายรูปเอกสาร">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="camOverlay"></canvas>
+  <div class="camerr" id="camErr">
+    <p style="margin:0;font-size:15px">เปิดกล้องในเบราว์เซอร์ไม่ได้</p>
+    <p class="muted" style="margin:0;font-size:13px">อนุญาตการใช้กล้องในการตั้งค่าเบราว์เซอร์ หรือใช้กล้องของระบบแทน</p>
+    <button class="btn pri sm" id="sysCam">ใช้กล้องของระบบ</button>
+  </div>
+  <div class="flash" id="flashFx"></div>
+  <div class="camtop">
+    <button class="glass round" id="camClose" aria-label="ปิดกล้อง"><svg class="i"><use href="#i-x"/></svg></button>
+    <div style="display:flex;gap:8px">
+      <button class="glass round" id="torch" aria-label="แฟลช" hidden><svg class="i"><use href="#i-flash"/></svg></button>
+      <button class="glass" id="autoShot" aria-pressed="true"><span class="dot"></span>ถ่ายอัตโนมัติ</button>
+    </div>
+  </div>
+  <div class="hint" id="hint" role="status">กำลังหาเอกสาร…</div>
+  <div class="cambar">
+    <div class="modes" id="modes">
+      <button data-m="card">บัตร</button><button data-m="doc" class="on">เอกสาร</button><button data-m="book">หนังสือ</button><button data-m="import">นำเข้ารูป</button>
+    </div>
+    <div class="shotrow">
+      <button class="stack" id="stack" aria-label="ดูหน้าที่ถ่ายแล้ว"><span class="b"></span><img id="stackImg" alt=""><span class="badge" id="stackN">0</span></button>
+      <button class="shutter" id="shutter" aria-label="ถ่ายภาพ"><span></span></button>
+      <button class="btn pri sm" id="camDone" style="min-width:76px">เสร็จ</button>
+    </div>
+  </div>
+</section>
+
+<!-- CROP -->
+<section class="screen" id="crop" aria-label="ปรับภาพ">
+  <div class="top">
+    <button class="ib" id="cropBack" aria-label="ย้อนกลับ"><svg class="i"><use href="#i-back"/></svg></button>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+      <h1 class="title" style="font-size:18px">ปรับภาพ</h1><span class="muted" style="font-size:12px" id="cropPos"></span>
+    </div>
+    <button class="btn pri sm" id="cropNext">ถัดไป</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="cropCanvas"></canvas>
+    <img id="resultImg" alt="ผลลัพธ์หลังปรับภาพ">
+    <div class="seg" role="group" aria-label="มุมมอง"><button id="vEdge" class="on">ขอบ</button><button id="vRes">ผลลัพธ์</button></div>
+    <div class="busy" id="busy"></div>
+    <div class="autochip"><div id="autoInfo"><svg class="i" style="width:14px;height:14px;color:var(--accent)"><use href="#i-spark"/></svg><span></span></div></div>
+  </div>
+  <div class="tools">
+    <button class="tool pri" id="tAuto"><svg class="i"><use href="#i-spark"/></svg>Auto</button>
+    <button class="tool" id="tRot"><svg class="i"><use href="#i-rot"/></svg>หมุน 90°</button>
+    <button class="tool" id="tDetect"><svg class="i"><use href="#i-detect"/></svg>หาขอบใหม่</button>
+    <button class="tool" id="tNoCrop"><svg class="i"><use href="#i-nocrop"/></svg>ไม่ Crop</button>
+  </div>
+  <div class="angle">
+    <div class="r"><label for="fine" class="muted">ปรับมุมละเอียด</label><b id="fineLbl" style="font-variant-numeric:tabular-nums">0.0°</b></div>
+    <input type="range" id="fine" min="-10" max="10" step="0.5" value="0">
+  </div>
+  <div class="filters" id="filters"></div>
+</section>
+
+<!-- EXPORT -->
+<section class="screen" id="export" aria-label="บันทึก PDF">
+  <div class="top">
+    <button class="ib" id="expBack" aria-label="ย้อนกลับ"><svg class="i"><use href="#i-back"/></svg></button>
+    <h1 class="title" style="font-size:18px">บันทึก PDF</h1>
+    <button class="ib" id="expHome" aria-label="ยกเลิกและกลับหน้าแรก"><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="scroll" style="padding-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 16px 10px">
+      <h2 style="font-size:15px;font-weight:600" id="pgCount"></h2><span class="muted" style="font-size:12px">กดค้างแล้วลากเพื่อสลับ · แตะเพื่อแก้</span>
+    </div>
+    <div class="pages" id="pages"></div>
+    <div class="sec">
+      <div style="display:flex;justify-content:space-between;align-items:center"><label for="fname" class="lbl">ชื่อไฟล์</label><span style="font-size:12px;color:var(--accent);display:flex;align-items:center;gap:4px" id="fnameHint"><svg class="i" style="width:12px;height:12px"><use href="#i-spark"/></svg>ตั้งชื่ออัตโนมัติ · แตะเพื่อแก้</span></div>
+      <div class="fname"><input id="fname" autocomplete="off"><span class="muted">.pdf</span><button class="ib" style="width:36px;height:36px;border-radius:10px;border:0;background:var(--s2)" id="fnameEdit" aria-label="แก้ไขชื่อไฟล์"><svg class="i" style="width:16px;height:16px"><use href="#i-edit"/></svg></button></div>
+      <div class="card" style="margin-top:4px">
+        <label class="row">ขนาดกระดาษ<select id="paper"><option value="a4">A4</option><option value="letter">Letter</option><option value="fit">ตามขนาดภาพ</option></select></label>
+        <label class="row">คุณภาพ<select id="quality"><option value="high">สูง</option><option value="bal">สมดุล</option><option value="small">ไฟล์เล็ก</option></select></label>
+        <div class="row"><span>ขนาดไฟล์โดยประมาณ</span><span class="muted" id="estSize">—</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="sheetbar">
+    <button class="btn pri" id="doDownload" style="height:56px;font-size:16px"><svg class="i"><use href="#i-dl"/></svg>ดาวน์โหลดลงเครื่อง</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <button class="btn" id="doShare"><svg class="i"><use href="#i-share"/></svg>แชร์</button>
+      <button class="btn" id="doDrive"><svg class="i"><use href="#i-cloud"/></svg>Google Drive</button>
+    </div>
+    <p class="muted" style="margin:2px 0 0;font-size:12px;text-align:center">แชร์ไป LINE, อีเมล หรือ “บันทึกไปยังไฟล์” ได้จากปุ่มแชร์</p>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section class="screen" id="settings" aria-label="ตั้งค่า">
+  <div class="top" style="justify-content:flex-start">
+    <button class="ib" id="setBack" aria-label="ย้อนกลับ"><svg class="i"><use href="#i-back"/></svg></button>
+    <h1 class="title" style="font-size:22px">ตั้งค่า</h1>
+  </div>
+  <div class="scroll" style="padding-bottom:32px">
+    <div class="sec"><h2>Auto</h2><div class="card" id="toggles"></div></div>
+    <div class="sec">
+      <h2>รูปแบบชื่อไฟล์</h2>
+      <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+        <div class="tok" id="tokens"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="addTokens"></div>
+        <div id="projWrap" hidden><label class="lbl" for="proj">ชื่อโครงการ</label><input class="inp" id="proj" placeholder="เช่น อาคาร A" style="margin-top:6px"></div>
+        <div id="textWrap" hidden><label class="lbl" for="ctext">ข้อความ</label><input class="inp" id="ctext" placeholder="เช่น ใบเสร็จ" style="margin-top:6px"></div>
+        <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px"><span class="muted">ตัวอย่าง</span><span id="namePreview" style="text-align:right;word-break:break-all"></span></div>
+      </div>
+    </div>
+    <div class="sec">
+      <h2>PDF และการจัดเก็บ</h2>
+      <div class="card">
+        <label class="row">โหมดเริ่มต้น<select id="defMode"><option value="doc">เอกสาร</option><option value="card">บัตร</option><option value="book">หนังสือ</option></select></label>
+        <label class="row">ขนาดกระดาษ<select id="defPaper"><option value="a4">A4</option><option value="letter">Letter</option><option value="fit">ตามขนาดภาพ</option></select></label>
+        <label class="row">คุณภาพ<select id="defQuality"><option value="high">สูง</option><option value="bal">สมดุล</option><option value="small">ไฟล์เล็ก</option></select></label>
+        <div class="row">Google Drive<span class="tag muted">อัปโหลดอัตโนมัติ · เฟส 2</span></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="card"><button class="row" id="clearAll" style="width:100%;background:none;border:0;color:var(--danger)">ลบเอกสารทั้งหมดในเครื่อง</button></div>
+      <p class="muted" style="font-size:12px;text-align:center;margin:8px 0 0">เวอร์ชัน <span id="ver"></span> · ไฟล์เก็บอยู่ในเบราว์เซอร์ของเครื่องนี้เท่านั้น</p>
+    </div>
+  </div>
+</section>
+
+<div class="mask" id="mask"><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div class="viewer" id="viewer"><img id="viewerImg" alt=""></div>
+<div class="toast" id="toast" role="status"></div>
+<input type="file" id="filePick" accept="image/*" multiple hidden>
+<input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
