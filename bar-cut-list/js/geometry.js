@@ -207,9 +207,9 @@
       if (zL) zones.push({ x0: g.x0, x1: g.x0 + zL, s: st.sEnd, count: left.length, label: 'หัวเสาซ้าย' });
       zones.push({ x0: g.x0 + zL, x1: g.x1 - zR, s, count: mid.length, label: zL || zR ? 'กลางคาน' : 'ตลอดช่วง' });
       if (zR) zones.push({ x0: g.x1 - zR, x1: g.x1, s: st.sEnd, count: right.length, label: 'หัวเสาขวา' });
-      const hook = BCL.hookLen(state, st.bar, 'stirrup135');
+      const deg = +st.deg === 90 ? 90 : 135, hook = BCL.hookLen(state, st.bar, deg === 90 ? 'stirrup90' : 'stirrup135');
       const cut = 2 * (sp.b - 2 * cover) + 2 * (sp.h - 2 * cover) + 2 * hook;
-      return { span: i, bar: st.bar, positions, zones, count: positions.length, cutLength: Math.round(cut), w: Math.round(sp.b - 2 * cover), h: Math.round(sp.h - 2 * cover), hook };
+      return { span: i, bar: st.bar, positions, zones, count: positions.length, cutLength: Math.round(cut), w: Math.round(sp.b - 2 * cover), h: Math.round(sp.h - 2 * cover), hook, deg };
     });
 
     return { cover, supports, spans, totalLen, ends, runs, extraTop, extraBot, stirrups, warnings };

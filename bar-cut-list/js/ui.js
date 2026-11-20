@@ -56,7 +56,7 @@
     h += row('&nbsp;&nbsp;การจบปลาย', sps.map((s, i) => `<td class="ends ${s.web.on ? '' : 'off'}">${endCell(i, 'web', 'left')}${endCell(i, 'web', 'right')}</td>`));
 
     h += sec('<span class="cs">เหล็กปลอก</span>');
-    h += row('ขนาด @ ระยะ', sps.map((s, i) => `<td><select ${c(i, 'stir.bar')}>${opt(s.stir.bar, BCL.STIRRUP_BARS)}</select> @ ${num(i, 'stir.s', s.stir.s, 25)}</td>`));
+    h += row('ขนาด @ ระยะ', sps.map((s, i) => `<td><select ${c(i, 'stir.bar')}>${opt(s.stir.bar, BCL.STIRRUP_BARS)}</select> @ ${num(i, 'stir.s', s.stir.s, 25)} <span class="lab">ขอ</span> <select ${c(i, 'stir.deg')}>${opt(String(+s.stir.deg === 90 ? 90 : 135), ['135', '90'], ['135°', '90°'])}</select></td>`));
     h += row('หัวเสาถี่กว่า', sps.map((s, i) => `<td><input type="checkbox" ${c(i, 'stir.endOn')} ${s.stir.endOn ? 'checked' : ''}>
         <span class="${s.stir.endOn ? '' : 'off'}"><span class="lab">@</span> ${num(i, 'stir.sEnd', s.stir.sEnd, 25)} <span class="lab">ยาวโซน</span> ${num(i, 'stir.endLen', s.stir.endLen, 50)}</span></td>`));
     h += row('<small>จำนวนปลอก (คำนวณ)</small>', G.stirrups.map(st => `<td class="calc">${st.count} ตัว · ยาวตัด ${u.out(st.cutLength)} ${u.t}</td>`));
@@ -112,7 +112,10 @@
         ${f('งอฉากเหล็กแกน = n × d, n =', 'hook.main90.factor')}
         ${fu('งอฉาก: อย่างน้อย', 'hook.main90.min', 10)}
         ${f('ขอปลอก 135° = n × d, n =', 'hook.stirrup135.factor')}
-        ${fu('ขอปลอก: อย่างน้อย', 'hook.stirrup135.min', 5)}
+        ${fu('ขอปลอก 135°: อย่างน้อย', 'hook.stirrup135.min', 5)}
+        ${f('ขอปลอก 90° = n × d, n =', 'hook.stirrup90.factor')}
+        ${fu('ขอปลอก 90°: อย่างน้อย', 'hook.stirrup90.min', 5)}
+        <label>มุมขอปลอก (ช่วงใหม่)<select data-p="stirrup.deg">${opt(String(p.stirrup.deg || 135), ['135', '90'], ['135°', '90°'])}</select></label>
         ${fu('ปลอกตัวแรกห่างหน้า Support', 'stirrup.firstSpacing', 10)}
         ${f('ยื่นเข้าคานลึกกว่า = n × d, n =', 'endDefaults.shallowToDeep.factorD')}
         ${f('โซนต่อเหล็กบน: กลางช่วงกว้าง L ×', 'splice.top.fraction', 0.01)}

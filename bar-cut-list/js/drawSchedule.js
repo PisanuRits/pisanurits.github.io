@@ -100,15 +100,17 @@
             svg.appendChild(E('text', { x: (a + b) / 2, y: yb + 25, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 700, fill: color }, `${z.count}-${it.bar}@${u.sp(z.s)} ${u.ab}`));
           });
           const sh = r.shape, ed = r.edited, cx = (xa + xb) / 2;
-          const hP = 58, wP = Math.max(30, Math.min(60, hP * sh.w / Math.max(1, sh.h))), x = cx - wP - 38, yt = yl + 14, gp = 5, dx = 13, xr = x + wP;
-          svg.appendChild(E('path', { d: `M${xr - dx},${yt + gp + dx} L${xr},${yt + gp} L${xr},${yt + hP} L${x},${yt + hP} L${x},${yt} L${xr - gp},${yt} L${xr - gp - dx},${yt + dx}`, fill: 'none', stroke: color, 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+          const hP = 58, wP = Math.max(40, Math.min(60, hP * sh.w / Math.max(1, sh.h))), x = cx - wP - 38, yt = yl + 14, gp = 5, dx = 13, xr = x + wP;
+          const d90 = sh.deg === 90, hk = 16;
+          svg.appendChild(E('path', { d: d90 ? `M${xr - hk},${yt + gp} L${xr},${yt + gp} L${xr},${yt + hP} L${x},${yt + hP} L${x},${yt} L${xr - gp},${yt} L${xr - gp},${yt + hk}` : `M${xr - dx},${yt + gp + dx} L${xr},${yt + gp} L${xr},${yt + hP} L${x},${yt + hP} L${x},${yt} L${xr - gp},${yt} L${xr - gp - dx},${yt + dx}`, fill: 'none', stroke: color, 'stroke-width': 3, 'stroke-linejoin': 'round' }));
           dimT(x + wP / 2, yt - 5, u.out(sh.w), it, r, 'w', 'middle', 11, ed.w);
           dimT(x - 5, yt + hP / 2 + 4, u.out(sh.h), it, r, 'h', 'end', 11, ed.h);
-          dimT(xr - gp - dx - 2, yt + dx + 15, u.out(sh.hook), it, r, 'hook', 'end', 10.5, ed.hook);
+          if (d90) dimT(xr - gp - 3, yt + hk + 13, u.out(sh.hook), it, r, 'hook', 'end', 10.5, ed.hook);
+          else dimT(xr - gp - dx - 2, yt + dx + 15, u.out(sh.hook), it, r, 'hook', 'end', 10.5, ed.hook);
           const tx = xr + 14, nStr = String(r.qty), edAny = r.isEd || r.qtyEd;
           dimT(tx, yt + 14, nStr, it, r, 'n', 'start', 12, r.qtyEd);
           svg.appendChild(E('text', { x: tx + nStr.length * 7 + 2, y: yt + 14, 'font-size': 12, 'font-weight': 700, fill: color }, `-${it.bar} · ${it.label}`));
-          svg.appendChild(E('text', { x: tx, y: yt + 31, 'font-size': 11, fill: '#495057' }, 'ขอ 135°'));
+          svg.appendChild(E('text', { x: tx, y: yt + 31, 'font-size': 11, fill: '#495057' }, `ขอ ${d90 ? 90 : 135}°`));
           svg.appendChild(E('text', { x: tx, y: yt + 48, 'font-size': 12, 'font-weight': 700, fill: edAny ? ED : '#212529' }, `ตัด ${u.out(r.cut)}`));
           if (edAny) { const b = E('text', { x: tx + 78, y: yt + 48, 'font-size': 13, class: 'rst' }, '↺'); b.appendChild(E('title', {}, 'คืนค่าที่โปรแกรมคำนวณ')); b.addEventListener('click', () => hooks.restore && hooks.restore(it, r)); svg.appendChild(b); }
           rowH = 32 + 92 + 34;

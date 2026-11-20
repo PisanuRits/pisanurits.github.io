@@ -12,13 +12,14 @@
     hook: {
       main90:     { mode: 'factor', factor: 12, min: 150 },
       stirrup135: { mode: 'factor', factor: 6,  min: 75 },
+      stirrup90:  { mode: 'factor', factor: 6,  min: 50 },
     },
     splice: {
       top:    { zone: 'midspan', fraction: 0.333 },
       bottom: { zone: 'support', fraction: 0.25 },
       stagger: true, staggerFactor: 1.3,
     },
-    stirrup: { firstSpacing: 50, legs: 2 },
+    stirrup: { firstSpacing: 50, legs: 2, deg: 135 },   // deg = มุมขอปลอกเริ่มต้นของช่วงใหม่
     cut: { kerf: 0, minOffcut: 1000 },        // เผื่อรอยตัด / เศษสั้นสุดที่ถือว่าใช้ต่อได้ (มม.)
     bend: { on: true, f90: 2, f135: 3, f180: 4 },   // ค่าหักการงอ = n × d ต่อการงอ 1 ครั้ง (ความยาวตัด = รวมระยะนอก–นอก − ค่าหัก)
     endDefaults: {
@@ -38,7 +39,7 @@
     web: { on: false, n: 2, bar: 'DB12', left: end(), right: end() },   // เหล็กข้าง (skin/web bar) จำนวนรวมทั้งสองข้าง
     extraTop: { on: false, n: 2, bar: 'DB12', frac: 'L/4' },
     extraBot: { on: false, n: 2, bar: 'DB12', len: { mode: 'frac', value: 'L/2', custom: 2000 } },
-    stir: { bar: 'RB6', s: 150, endOn: false, sEnd: 100, endLen: 1000 },   // endOn = หัวเสาเสริมถี่กว่า
+    stir: { bar: 'RB6', s: 150, endOn: false, sEnd: 100, endLen: 1000, deg: 135 },   // endOn = หัวเสาเสริมถี่กว่า
   });
   BCL.defaultSupport = () => ({ width: 200, on: true });
 
@@ -68,7 +69,7 @@
   BCL.setSpanCount = (state, n) => {
     n = Math.max(1, Math.min(6, n | 0));
     const b = state.beam;
-    while (b.spans.length < n) { const c = clone(b.spans[b.spans.length - 1] || BCL.defaultSpan()); c.name = `B${b.spans.length + 1}`; b.spans.push(c); }
+    while (b.spans.length < n) { const c = clone(b.spans[b.spans.length - 1] || BCL.defaultSpan()); c.name = `B${b.spans.length + 1}`; c.stir.deg = +(state.project.stirrup && state.project.stirrup.deg) || c.stir.deg || 135; b.spans.push(c); }
     b.spans.length = n;
     if (b.supports.length > n + 1) b.supports.length = n + 1;
     if (b.supports.length === n + 1 && b.supports[n]) b.supports[n].on = b.supports[n].on !== false;   // ตัวริมใหม่ให้มี Support

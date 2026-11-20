@@ -64,7 +64,7 @@
     // ปลอก: 1 รายการต่อช่วง (ความยาวตัดเท่ากันทั้งช่วง) แยกโซนไว้สำหรับแสดงผล
     G.stirrups.forEach((st, i) => {
       const g = G.spans[i];
-      push({ kind: 'stir', bar: st.bar, n: st.count, x0: g.x0, x1: g.x1, hookStart: 0, hookEnd: 0, lap: 0, cutLength: st.cutLength, w: st.w, h: st.h, hook: st.hook, positions: st.positions,
+      push({ kind: 'stir', bar: st.bar, n: st.count, x0: g.x0, x1: g.x1, hookStart: 0, hookEnd: 0, lap: 0, cutLength: st.cutLength, w: st.w, h: st.h, hook: st.hook, deg: st.deg, positions: st.positions,
         zones: st.zones.map(z => ({ x0: z.x0, x1: z.x1, s: z.s, count: z.count, label: z.label })), label: `ปลอก ${g.name}` });
     });
 
@@ -109,7 +109,7 @@
     const o = (beam.ovr || {})[keyOf(it)] || {}, edited = {};
     let calc, shape;
     if (it.kind === 'stir') {
-      calc = { k: 'S', w: it.w, h: it.h, hook: it.hook, deg: 135 };
+      calc = { k: 'S', w: it.w, h: it.h, hook: it.hook, deg: +it.deg === 90 ? 90 : 135 };
       shape = { ...calc, ...o }; Object.keys(o).forEach(f => edited[f] = 1);
       if (it.userLength != null && !Object.keys(o).length) { shape.hook = Math.round((it.userLength - 2 * (calc.w + calc.h)) / 2); edited.hook = 1; }
     } else {
@@ -130,7 +130,7 @@
       }
       const { calc, shape, edited } = BCL.beamShapeOf(beam, it), qty = it.userN ?? it.n;
       const sum = Math.round(BCL.fLenOf(shape)), bends = BCL.fBendsOf(shape), deduct = BCL.bendDeduct(state, it.bar, bends), cut = sum - deduct;
-      const u = BCL.units(state), note = it.kind === 'stir' ? `ขอ 135° · ${it.n} ตัวตามระยะ` : it.lap ? `เผื่อทาบ ${u.out(it.lap)} ${u.t}` : '';
+      const u = BCL.units(state), note = it.kind === 'stir' ? `ขอ ${+it.deg === 90 ? 90 : 135}° · ${it.n} ตัวตามระยะ` : it.lap ? `เผื่อทาบ ${u.out(it.lap)} ${u.t}` : '';
       return { key: keyOf(it), item: it, label: it.label, note, bar: it.bar, code: BCL.fCode(shape), shape, calcShape: calc, edited, isEd: Object.keys(edited).length > 0,
         qtyEd: it.userN != null, sum, calcSum: Math.round(BCL.fLenOf(calc)), bends, deduct, cut, qty, weight: qty * cut / 1000 * BCL.bar(it.bar).w };
     });
