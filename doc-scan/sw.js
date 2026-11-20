@@ -1,5 +1,5 @@
 /* Doc Scan service worker — offline after first visit */
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE = 'doc-scan-' + VERSION;
 const SHELL = ['./', 'index.html', 'app.js', 'worker.js', 'cvproc.js', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'vendor/jspdf.umd.min.js'];

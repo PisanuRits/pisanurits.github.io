@@ -1,6 +1,6 @@
 /* Doc Scan — สแกนเอกสารเป็น PDF */
 'use strict';
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -335,9 +335,18 @@ async function detLoop() {
   }
   if (stream) detTimer = setTimeout(detLoop, 180);
 }
-function onLiveQuad(q) {
+let missCount = 0;
+function onLiveQuad(raw) {
   const now = performance.now();
-  if (q && lastQuad && maxMove(q, lastQuad) < 0.02) { if (!stableSince) stableSince = now; }
+  let q = raw;
+  // hysteresis: ride over a couple of missed frames instead of flickering
+  if (!raw) { missCount++; q = missCount <= 3 ? lastQuad : null; }
+  else {
+    missCount = 0;
+    // smoothing: blend with the previous quad when it is close, so the frame doesn't jitter
+    if (lastQuad && maxMove(raw, lastQuad) < 0.06) q = raw.map((p, i) => ({ x: lastQuad[i].x * 0.5 + p.x * 0.5, y: lastQuad[i].y * 0.5 + p.y * 0.5 }));
+  }
+  if (raw && lastQuad && maxMove(q, lastQuad) < 0.015) { if (!stableSince) stableSince = now; }
   else stableSince = 0;
   if (!q) armed = true;
   else if (!armed && lastShotQuad && maxMove(q, lastShotQuad) > 0.1) armed = true;
