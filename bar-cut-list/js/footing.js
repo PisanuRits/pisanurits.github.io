@@ -288,18 +288,19 @@
     return b.on === false ? 'ความยาวตัด = รวมระยะนอก–นอก (ไม่หักการงอ — ตั้งได้ใน ⚙ กฎโครงการ)' : `ความยาวตัด = รวมระยะนอก–นอก − ค่าหักการงอ (90°=${b.f90}d, 135°=${b.f135}d)`; };
   BCL.renderBarList = function (tbl, state, rows, o) {
     const u = BCL.units(state), m = u.out, mult = o.mult || 1, showMult = o.multHead != null;
-    let h = `<tr><th>#</th><th>รายการ</th><th>เหล็ก</th><th>รูปทรง (ระยะนอก–นอก, ${u.t})<br><small>คลิกตัวเลขเพื่อแก้</small></th><th>ตัด (${u.t})</th><th>${o.qtyHead || 'จำนวน'}</th>${showMult ? `<th>${o.multHead}</th>` : ''}<th>นน. (กก.)</th></tr>`, kg = 0, tot = 0;
+    let h = `<tr><th>#</th><th>รายการ</th><th>เหล็ก</th><th>รูปทรง (ระยะนอก–นอก, ${u.t})<br><small>${o.readOnly ? 'แสดงผล — แก้ที่รูปวางเหล็กด้านบน' : 'คลิกตัวเลขเพื่อแก้'}</small></th><th>ตัด (${u.t})</th><th>${o.qtyHead || 'จำนวน'}</th>${showMult ? `<th>${o.multHead}</th>` : ''}<th>นน. (กก.)</th></tr>`, kg = 0, tot = 0;
     rows.forEach((r, i) => {
       const w = r.weight * mult; kg += w; tot += r.qty * mult;
       const calcCut = r.calcSum - BCL.bendDeduct(state, r.bar, BCL.fBendsOf(r.calcShape));
       h += `<tr><td>${i + 1}</td><td class="l">${r.label}${r.note ? `<br><small>${r.note}</small>` : ''}<br><small class="code">${r.code} ${BCL.SHAPE_T[r.code] || ''}</small></td><td><b>${r.bar}</b></td>
-        <td class="shp${r.isEd ? ' ed' : ''}" data-i="${i}">${r.isEd || r.qtyEd ? `<button class="rst" data-i="${i}" title="คืนค่าที่โปรแกรมคำนวณ">↺</button>` : ''}</td>
+        <td class="shp${r.isEd ? ' ed' : ''}" data-i="${i}">${(r.isEd || r.qtyEd) && !o.readOnly ? `<button class="rst" data-i="${i}" title="คืนค่าที่โปรแกรมคำนวณ">↺</button>` : ''}</td>
         <td class="cut${r.isEd ? ' ed' : ''}"><b>${m(r.cut)}</b>${r.deduct ? `<small>รวมด้าน ${m(r.sum)} − หักงอ ${m(r.deduct)}</small><small class="bt">${BCL.fBendText(r.bends)}</small>` : ''}${r.isEd && calcCut !== r.cut ? `<small>คำนวณ ${m(calcCut)}</small>` : ''}</td>
         <td class="${r.qtyEd ? 'qed' : ''}">${r.qty}</td>${showMult ? `<td><b>${r.qty * mult}</b></td>` : ''}<td>${w.toFixed(1)}</td></tr>`;
     });
     h += `<tr class="sum"><td colspan="${showMult ? 6 : 5}">${o.totalLabel || 'รวม'}</td><td>${tot}</td><td>${kg.toFixed(1)}</td></tr>`;
-    tbl.innerHTML = h;
+    tbl.innerHTML = h; tbl.classList.toggle('ro', !!o.readOnly);
     tbl.querySelectorAll('td.shp').forEach(td => { const r = rows[+td.dataset.i]; td.appendChild(BCL.fShapeSVG(r.shape, u, r.edited)); });
+    if (o.readOnly) return;
     tbl.querySelectorAll('td.shp text.dim').forEach(t => t.addEventListener('click', () => {
       const td = t.closest('td'), r = rows[+td.dataset.i], fld = t.dataset.f, bb = t.getBoundingClientRect(), tb = td.getBoundingClientRect();
       const inp = document.createElement('input'); inp.type = 'number'; inp.className = 'dimedit'; inp.step = u.step(5); inp.value = m(r.shape[fld]);

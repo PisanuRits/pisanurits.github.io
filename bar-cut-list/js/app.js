@@ -17,34 +17,19 @@
     wrap.classList.toggle('dim', !!(sch && sch.stale));
     if (!sch) { wrap.innerHTML = ''; wrap.style.height = ''; wrap.style.width = ''; $('#schedTotal').textContent = ''; showSchedWarnings([]); return; }
     applyCollapse();
-    const res = BCL.drawSchedule(wrap, state, lastG, lastLayout);
-    showSchedWarnings(res.issues); updateTotal(); renderBeamBars();
-    wrap.querySelectorAll('[data-sid]').forEach(inp => {
-      inp.addEventListener('input', () => {
-        const it = sch.items.find(x => x.id === inp.dataset.sid); if (!it) return;
-        const f = inp.dataset.f;
-        if (f === 'userLength') BCL.beamSetOut(state.beam, it, inp.value === '' ? 0 : Math.round(BCL.units(state).in(inp.value)));
-        else { const v = +inp.value; it.userN = inp.value === '' || !(v > 0) || v === it.n ? null : v; }
-        inp.closest('.sitem').classList.toggle('edited', it.userLength != null || it.userN != null || !!(state.beam.ovr || {})[it.id + '|' + it.bar]);
-        BCL.save(state); updateTotal(); renderBeamBars();
-        showSchedWarnings(BCL.drawSchedule(wrap, state, lastG, lastLayout, { svgOnly: true }).issues);   // อัปเดตเส้น/ระยะทาบทันที
-      });
-      inp.addEventListener('change', () => renderSchedule());   // สร้างใหม่เมื่อออกจากช่อง
+    const done = () => { BCL.save(state); renderSchedule(); };
+    const res = BCL.drawSchedule(wrap, state, lastG, lastLayout, {
+      edit: (it, r, f, v) => { if (f === 'n') r.item.userN = v === r.item.n ? null : v; else BCL.beamEdit(state.beam, r, f, v); done(); },
+      anchor: (it, side, r) => { r.item.anchor = side; done(); },
+      restore: (it, r) => { BCL.beamRestore(state.beam, r); done(); },
     });
-    wrap.querySelectorAll('[data-anc]').forEach(b => b.addEventListener('click', () => {
-      const it = sch.items.find(x => x.id === b.dataset.anc); if (!it) return;
-      it.anchor = (it.anchor || 'left') === 'right' ? 'left' : 'right'; BCL.save(state); renderSchedule();
-    }));
+    showSchedWarnings(res.issues); updateTotal(); renderBeamBars();
   }
   /* ตารางรูปทรง + ความยาวตัด (ระบบเดียวกับฐานราก) */
   function renderBeamBars() {
     if (!state.beam.schedule) return;
     $('#bBendInfo').textContent = BCL.bendInfoText(state);
-    BCL.renderBarList($('#bBs'), state, BCL.beamBarRows(state, state.beam), {
-      totalLabel: `รวม ${state.beam.name}`,
-      onEdit: (r, fld, val) => { BCL.beamEdit(state.beam, r, fld, val); BCL.save(state); renderSchedule(); },
-      onRestore: r => { BCL.beamRestore(state.beam, r); BCL.save(state); renderSchedule(); },
-    });
+    BCL.renderBarList($('#bBs'), state, BCL.beamBarRows(state, state.beam), { totalLabel: `รวม ${state.beam.name}`, readOnly: true });
   }
   function showSchedWarnings(issues) {
     const sch = state.beam.schedule, wb = $('#schedWarnings');

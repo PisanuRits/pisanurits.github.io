@@ -170,6 +170,12 @@ table.bs td.shp text.dim.ed{fill:#e67700;text-decoration:underline #f59f00}
 table.bs td.shp .rst{position:absolute;top:4px;right:4px;padding:1px 6px}
 table.bs td.cut b{font-size:13px} table.bs td.cut small{display:block;font-size:10px;white-space:nowrap}
 table.bs td.cut small.bt{color:#adb5bd} table.bs td.cut.ed{background:#fff9db}
+table.bs.ro td.shp text.dim{cursor:default;text-decoration:none} table.bs.ro td.shp text.dim:hover{fill:inherit}
+table.bs.ro td.shp text.dim.ed{fill:#e67700}
+.schedwrap text.dim{cursor:pointer;text-decoration:underline dotted #adb5bd}
+.schedwrap text.dim:hover{fill:var(--accent)}
+.schedwrap text.dim.ed{fill:#e67700;font-weight:700;text-decoration:underline #f59f00}
+.schedwrap .anc,.schedwrap .rst{cursor:pointer} .schedwrap .rst:hover{fill:var(--accent)}
 table.bs td.qed{background:#fff9db;color:#e67700;font-weight:700}
 .bbars{margin-top:14px} .bbars h3{font-size:14px;margin:0 0 8px} .bbars h3 small{font-weight:normal;color:var(--muted);font-size:11px;margin-left:8px}
 table.bs tr.sum td{background:#eef3ff;font-weight:700}
