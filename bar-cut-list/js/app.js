@@ -87,12 +87,15 @@
       if (!state.footingEdit) state.footingEdit = { sentAt: m.sentAt, draft: BCL.clone(state.footing) };
       state.footing = BCL.clone(m.data); BCL.save(state); showPage('footing'); return;
     }
-    if (!confirm(`ดึง "${m.name}" กลับมาแก้ — ชุดคานที่กำลังแก้อยู่ (${state.beam.name}) จะถูกแทนที่ และ "${m.name}" จะออกจากรายการจนกว่าจะส่งใหม่ ดำเนินการ?`)) return;
-    state.beam = BCL.clone(m.data); state.members.splice(i, 1); BCL.save(state); showPage('beam');
+    // โหมดแก้ไขคาน: ชุดเดิมยังอยู่ในรายการ · คานที่ร่างค้างไว้ถูกพักไว้ แล้วคืนให้ตอนออก
+    if (state.beamEdit && state.beamEdit.sentAt !== m.sentAt) endBeamEdit();
+    if (!state.beamEdit) state.beamEdit = { sentAt: m.sentAt, draft: BCL.clone(state.beam) };
+    state.beam = BCL.clone(m.data); BCL.save(state); showPage('beam');
   }
   function delMember(i) {
     if (!confirm(`ลบ "${state.members[i].name}" ออกจากรายการ?`)) return;
     if (state.footingEdit && state.members[i].sentAt === state.footingEdit.sentAt) endFootingEdit();
+    if (state.beamEdit && state.members[i].type === 'beam' && state.members[i].sentAt === state.beamEdit.sentAt) endBeamEdit();
     state.members.splice(i, 1); BCL.save(state); if (page === 'home') renderHome(); else renderMembers();
   }
   /* ---------- ฐานราก ---------- */
@@ -127,6 +130,19 @@
   function renderFooting() { BCL.renderFooting($('#pageFooting'), state, footingHooks); updateCrumb(); }
   function renderHome() { BCL.renderHome($('#pageHome'), state, { go: showPage, load: loadMember, del: delMember }); }
 
+  /* ---------- โหมดแก้ไขคาน ---------- */
+  const beamEditIdx = () => state.beamEdit ? state.members.findIndex(m => m.type === 'beam' && m.sentAt === state.beamEdit.sentAt) : -1;
+  function endBeamEdit() { if (!state.beamEdit) return; state.beam = state.beamEdit.draft || BCL.defaultState(2).beam; delete state.beamEdit; }
+  function updateBeamEditUI() {
+    let i = beamEditIdx(); if (i < 0 && state.beamEdit) { endBeamEdit(); BCL.save(state); }
+    const m = i >= 0 ? state.members[i] : null, bar = $('#beamEditBar');
+    bar.classList.toggle('hide', !m);
+    if (m) bar.innerHTML = `✎ กำลังแก้ไข <b>${BCL.memberLabel(m)}</b> ที่ส่งไปแล้ว — กด <b>บันทึกและออก</b> เพื่อบันทึกทับชุดเดิม หรือ <b>ยกเลิก</b> เพื่อออกโดยไม่บันทึก (ชุดเดิมในรายการไม่หาย)`;
+    $('#btnToCut').textContent = m ? 'บันทึกและออก' : 'ส่งไป Bar Cut List →';
+    $('#btnBeamCancel').classList.toggle('hide', !m);
+  }
+  $('#btnBeamCancel').addEventListener('click', () => { if (!confirm('ออกโดยไม่บันทึกการแก้ไข?')) return; endBeamEdit(); BCL.save(state); showPage('home'); });
+
   function sendToCutList() {
     const sch = state.beam.schedule;
     if (!sch) return alert('กด Generate ก่อน');
@@ -136,6 +152,13 @@
     const name = state.beam.name || 'B';
     const rows = BCL.scheduleRows(state);
     const floor = state.beam.floor || '';
+    const ei = beamEditIdx();
+    if (ei >= 0) {   // โหมดแก้ไข: บันทึกทับชุดเดิม แล้วกลับหน้ารวม
+      const dup = state.members.findIndex((m, j) => j !== ei && m.type === 'beam' && m.name === name && (m.floor || '') === floor);
+      if (dup >= 0 && !confirm(`มีคานชื่อ "${name}"${floor ? ' ใน' + floor : ''} อีกชุดอยู่แล้ว — บันทึกชื่อซ้ำ?`)) return;
+      state.members[ei] = { ...state.members[ei], name, floor, data: BCL.clone(state.beam), rows, editedAt: Date.now() };
+      endBeamEdit(); BCL.save(state); showPage('home'); return;
+    }
     const member = { type: 'beam', name, floor, sentAt: Date.now(), data: BCL.clone(state.beam), rows };
     const idx = (state.members || []).findIndex(m => m.name === name && m.type === 'beam' && (m.floor || '') === floor);
     if (idx >= 0) { if (!confirm(`มีคานชื่อ "${name}"${floor ? ' ใน' + floor : ''} อยู่แล้ว — แทนที่?`)) return; state.members[idx] = member; } else state.members.push(member);
@@ -186,7 +209,7 @@
   const CLS = { home: 'tab-home', footing: 'tab-footing', beam: 'tab-model', summary: 'tab-summary', cutsheet: 'tab-cutsheet' };
   function updateCrumb() {
     const home = '<a data-p="home">หน้ารวม</a>';
-    $('#crumb').innerHTML = page === 'home' ? '' : page === 'footing' ? `${home} › ฐานราก › ${state.footingEdit ? '<span class="editbadge">แก้ไข</span> ' : ''}<b>${state.footing.name}</b>` : page === 'beam' ? `${home} › คาน › <b>${[state.beam.floor, state.beam.name].filter(Boolean).join(' · ')}</b>` : `${home} › ${page === 'summary' ? 'สรุป & แผนตัด' : 'ใบตัดเหล็ก'}`;
+    $('#crumb').innerHTML = page === 'home' ? '' : page === 'footing' ? `${home} › ฐานราก › ${state.footingEdit ? '<span class="editbadge">แก้ไข</span> ' : ''}<b>${state.footing.name}</b>` : page === 'beam' ? `${home} › คาน › ${state.beamEdit ? '<span class="editbadge">แก้ไข</span> ' : ''}<b>${[state.beam.floor, state.beam.name].filter(Boolean).join(' · ')}</b>` : `${home} › ${page === 'summary' ? 'สรุป & แผนตัด' : 'ใบตัดเหล็ก'}`;
     $('#crumb').querySelectorAll('[data-p]').forEach(a => a.onclick = () => showPage(a.dataset.p));
   }
   function showPage(p, keepScroll) {
@@ -197,7 +220,7 @@
     $('#membersBar').classList.toggle('hide', p !== 'beam' || !(state.members || []).length);
     if (p === 'home') renderHome();
     if (p === 'footing') renderFooting();
-    if (p === 'beam') render();
+    if (p === 'beam') { render(); updateBeamEditUI(); }
     if (p === 'summary') BCL.renderSummary($('#pageSummary'), state);
     if (p === 'cutsheet') BCL.renderCutsheet($('#pageCutsheet'), state);
     updateCrumb();

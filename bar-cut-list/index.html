@@ -27,6 +27,7 @@
 <div id="pageSummary" class="page hide"></div>
 <div id="pageCutsheet" class="page hide"></div>
 <div id="editor" class="page hide">
+  <div id="beamEditBar" class="editbar hide"></div>
   <div class="beamhead">
     <label>ชั้น<select id="beamFloor" title="ชั้นของคานชุดนี้ (ใช้จัดกลุ่มในหน้ารวม / ใบตัด)"></select></label>
     <label>ชื่อชุดคาน<input type="text" id="beamName" value="B1" title="ตั้งชื่อเองได้อิสระ เช่น B1 แนว A, คานซอยห้องน้ำ"></label>
@@ -58,6 +59,7 @@
       <button id="btnSchedReset" title="ล้างค่าความยาว/จำนวน/ระยะบนรูปทรงที่แก้เองทั้งหมด">↺ คืนค่าคำนวณทั้งหมด</button>
       <span class="spacer"></span>
       <span id="schedTotal" class="hint"></span>
+      <button id="btnBeamCancel" class="hide" title="ออกโดยไม่บันทึกการแก้ไข">ยกเลิก</button>
       <button id="btnToCut" class="primary" title="บันทึกชุดคานนี้เข้ารายการสำหรับทำ Bar Cut List">ส่งไป Bar Cut List →</button>
     </div>
     <div id="schedStale" class="stale hide">⚠ ข้อมูลคานเปลี่ยนหลังจาก Generate — กด Generate ใหม่เพื่ออัปเดต</div>
